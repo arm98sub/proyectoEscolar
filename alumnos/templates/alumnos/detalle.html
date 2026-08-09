@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expediente - {{ alumno.nombre }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-gray-50 font-sans antialiased text-gray-900">
+
+    <!-- Navbar -->
+    <nav class="bg-[#1B365D] text-white p-4 shadow-md">
+        <div class="max-w-5xl mx-auto flex justify-between items-center">
+            <a href="{% url 'dashboard' %}" class="text-sm bg-blue-800 hover:bg-blue-900 px-3 py-1 rounded-lg transition-colors">
+                ⬅️ Volver al Dashboard
+            </a>
+            <h1 class="text-lg font-bold">Expediente Individual</h1>
+        </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+        
+        <!-- Tarjeta de Información del Alumno -->
+        <div class="bg-white p-6 rounded-xl shadow-xs border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <span class="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full 
+                    {% if alumno.semaforo == 'ROJO' %}bg-red-100 text-red-800{% elif alumno.semaforo == 'AMARILLO' %}bg-amber-100 text-amber-800{% else %}bg-green-100 text-green-800{% endif %}">
+                    Semáforo {{ alumno.semaforo }}
+                </span>
+                <h2 class="text-2xl font-bold text-gray-800 mt-2">{{ alumno.nombre }}</h2>
+                <!-- Corregido: Accedemos al grado y sección a través de la relación grupo -->
+                <p class="text-sm text-gray-500">Grupo: <span class="font-semibold text-gray-700">{{ alumno.grupo.grado }}°{{ alumno.grupo.seccion }}</span></p>
+            </div>
+            
+            <div class="text-left md:text-right border-t md:border-t-0 pt-4 md:pt-0 border-gray-100">
+                <p class="text-xs text-gray-400 font-semibold uppercase">Índice de Incumplimiento</p>
+                <!-- Corregido: Llamamos a tu propiedad dinámica real -->
+                <p class="text-3xl font-black {% if alumno.semaforo == 'ROJO' %}text-red-600{% elif alumno.semaforo == 'AMARILLO' %}text-amber-500{% else %}text-green-600{% endif %}">
+                    {{ alumno.porcentaje_incumplimiento_tareas }}%
+                </p>
+                <p class="text-xs text-gray-500 mt-0.5">Tiene tareas sin entregar en el sistema</p>
+            </div>
+        </div>
+<!-- Formulario Rápido para Registrar Falta de Tarea -->
+        <div class="bg-white p-6 rounded-xl shadow-xs border border-gray-100">
+            <h3 class="font-bold text-gray-800 text-base mb-4 flex items-center gap-2">
+                ➕ Registrar Nueva Tarea Pendiente
+            </h3>
+            
+            <form action="{% url 'agregar_tarea_pendiente' alumno.id %}" method="POST" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {% csrf_token %}
+                
+                <!-- Selector de Materia -->
+                <div>
+                    <label for="materia" class="block text-xs font-semibold text-gray-600 uppercase mb-1">Materia</label>
+                    <select name="materia" id="materia" required class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm text-gray-800 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all">
+                        <option value="" disabled selected>Selecciona materia...</option>
+                        {% for materia in materias %}
+                            <option value="{{ materia.id }}">{{ materia.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Campo Nombre de Tarea -->
+                <div>
+                    <label for="nombre_tarea" class="block text-xs font-semibold text-gray-600 uppercase mb-1">Descripción / Tarea</label>
+                    <input type="text" name="nombre_tarea" id="nombre_tarea" placeholder="Ej. Llenar tabla pág. 45" required class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-sm text-gray-800 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all">
+                </div>
+
+                <!-- Botón de Guardar -->
+                <div class="flex items-end">
+                    <button type="submit" class="w-full bg-blue-900 hover:bg-blue-800 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors cursor-pointer shadow-xs">
+                        Guardar Tarea
+                    </button>
+                </div>
+            </form>
+        </div>
+        <!-- Listado de Tareas con Filtro por Materia -->
+        <div class="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
+            <div class="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <h3 class="font-bold text-gray-700 text-base">Seguimiento de Tareas y Actividades</h3>
+                
+                <!-- Barra de Filtros por Materia -->
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="text-xs font-semibold text-gray-400 mr-1">Filtrar:</span>
+                    
+                    <!-- Botón 'Todas' -->
+                    <a href="{% url 'detalle_alumno' alumno.id %}" 
+                       class="px-2.5 py-1 rounded-lg text-xs font-medium transition-colors {% if not materia_seleccionada %}bg-blue-900 text-white shadow-xs{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+                        Todas
+                    </a>
+
+                    <!-- Botones por cada Materia -->
+                    {% for mat in materias %}
+                        <a href="{% url 'detalle_alumno' alumno.id %}?materia={{ mat.id }}" 
+                           class="px-2.5 py-1 rounded-lg text-xs font-medium transition-colors {% if materia_seleccionada == mat.id %}bg-blue-900 text-white shadow-xs{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+                            {{ mat.nombre }}
+                        </a>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="divide-y divide-gray-100">
+                {% for t in tareas %}
+                <div class="p-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
+                    <div class="space-y-1 pr-4">
+                        <p class="font-medium text-sm text-gray-900">{{ t.nombre_tarea }}</p>
+                        
+                        <p class="text-xs text-blue-700 font-semibold bg-blue-50 inline-block px-2 py-0.5 rounded border border-blue-100">
+                            📚 {{ t.materia.nombre }}
+                        </p>
+                        <p class="text-xs text-gray-400 block mt-1">Registrada el: {{ t.fecha_registro|date:"d/M/Y" }}</p>
+                    </div>
+                    
+                    <div>
+                        <a href="{% url 'marcar_tarea' alumno.id t.id %}" class="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer">
+                            ⏳ Pendiente (Quitar Falta)
+                        </a>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="p-8 text-center text-gray-400 italic text-sm">
+                    ¡Excelente! No hay tareas pendientes en esta materia. 🎉
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </main>
+
+</body>
+</html>

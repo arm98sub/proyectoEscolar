@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*$py.class
+*.egg-info
+
+# Virtual environments
+.venv
+
+
+# Base de Datos local (opcional, recomendable si no quieres subir datos reales)
+*.sqlite3
+
+# Entorno y configuraciones locales
+.env
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db

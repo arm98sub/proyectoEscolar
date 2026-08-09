@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:15
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=school_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=secret_password
+
+  web:
+    build: .
+    volumes:
+      - .:/code
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgres://admin:secret_password@db:5432/school_db
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:

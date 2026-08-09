@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historial de Tareas Encargadas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800">
+
+    <nav class="bg-indigo-700 text-white shadow-md mb-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+            <a href="{% url 'dashboard' %}" class="font-bold text-lg tracking-wide hover:text-indigo-200 transition-colors">
+                ← Volver al Dashboard
+            </a>
+            <a href="{% url 'registrar_tarea_encargada' %}" class="bg-indigo-600 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
+                + Nueva Tarea
+            </a>
+        </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto px-4 pb-12">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 md:p-8">
+            <div class="mb-6 pb-4 border-b border-gray-100">
+                <h1 class="text-2xl font-bold text-gray-900">Historial de Tareas Encargadas</h1>
+                <p class="text-sm text-gray-500 mt-1">
+                    Gestiona, edita o elimina las tareas registradas para actualizar el denominador del semáforo.
+                </p>
+            </div>
+
+            {% if tareas %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="border-b border-gray-200 bg-gray-50 text-xs uppercase font-semibold text-gray-500">
+                            <th class="py-3 px-4">Grupo</th>
+                            <th class="py-3 px-4">Materia</th>
+                            <th class="py-3 px-4">Título / Descripción</th>
+                            <th class="py-3 px-4 text-right">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for tarea in tareas %}
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="py-3.5 px-4 font-bold text-indigo-700">
+                                {{ tarea.grupo.grado }}°{{ tarea.grupo.seccion }}
+                            </td>
+                            <td class="py-3.5 px-4 font-medium text-gray-700">
+                                {{ tarea.materia.nombre }}
+                            </td>
+                            <td class="py-3.5 px-4 text-gray-900">
+                                {{ tarea.titulo }}
+                            </td>
+                            <td class="py-3.5 px-4 text-right">
+                                <div class="inline-flex items-center gap-2">
+                                    <a href="{% url 'editar_tarea_encargada' tarea.id %}" class="px-3 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-md font-medium text-xs transition-colors">
+                                        Editar
+                                    </a>
+                                    <a href="{% url 'eliminar_tarea_encargada' tarea.id %}" 
+   onclick="return confirm('¿Seguro que deseas eliminar la tarea {{ tarea.titulo }}?');" 
+   class="px-3 py-1 bg-red-50 text-red-700 hover:bg-red-100 rounded-md font-medium text-xs transition-colors">
+    Eliminar
+</a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-gray-500">
+                <p>No hay tareas encargadas registradas todavía.</p>
+            </div>
+            {% endif %}
+        </div>
+    </main>
+</body>
+</html>

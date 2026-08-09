@@ -16,4 +16,7 @@ urlpatterns = [
     # --- NUEVA RUTA AQUÍ ---
     path('alumno/<int:alumno_id>/agregar-tarea/', agregar_tarea_pendiente, name='agregar_tarea_pendiente'),
     path('tarea-encargada/nueva/', views.registrar_tarea_encargada, name='registrar_tarea_encargada'),
+    path('tareas-encargadas/', views.lista_tareas_encargadas, name='lista_tareas_encargadas'),
+    path('tareas-encargadas/<int:tarea_id>/editar/', views.editar_tarea_encargada, name='editar_tarea_encargada'),
+    path('tareas-encargadas/<int:tarea_id>/eliminar/', views.eliminar_tarea_encargada, name='eliminar_tarea_encargada'),
 ]

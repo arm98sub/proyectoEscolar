@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmar Eliminación</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800 flex items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 max-w-md w-full">
+        <h1 class="text-lg font-bold text-red-600 mb-2">¿Eliminar Tarea Encargada?</h1>
+        <p class="text-sm text-gray-600 mb-4">
+            Estás a punto de eliminar la tarea <strong>"{{ tarea.titulo }}"</strong> del grupo <strong>{{ tarea.grupo.grado }}°{{ tarea.grupo.seccion }}</strong>.
+        </p>
+        <p class="text-xs bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-lg mb-6">
+            ⚠️ Al eliminar esta tarea, disminuirá el total de tareas encargadas del grupo y se recalculará automáticamente el semáforo de todos sus alumnos.
+        </p>
+
+        <form method="POST" class="flex items-center justify-end gap-3">
+            {% csrf_token %}
+            <a href="{% url 'lista_tareas_encargadas' %}" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</a>
+            <button type="submit" class="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg">Sí, Eliminar</button>
+        </form>
+    </div>
+</body>
+</html>

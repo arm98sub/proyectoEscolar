@@ -193,3 +193,51 @@ def registrar_tarea_encargada(request):
         form = TareaEncargadaForm(user=request.user)
 
     return render(request, 'alumnos/registrar_tarea.html', {'form': form})
+
+# --- GESTIÓN DE TAREAS ENCARGADAS ---
+
+@login_required(login_url='login')
+def lista_tareas_encargadas(request):
+    """Muestra la lista de tareas encargadas registradas."""
+    if request.user.is_superuser:
+        tareas = TareaEncargada.objects.all().select_related('grupo', 'materia').order_by('-id')
+    else:
+        tareas = TareaEncargada.objects.filter(grupo__maestro=request.user).select_related('grupo', 'materia').order_by('-id')
+        
+    return render(request, 'alumnos/lista_tareas.html', {'tareas': tareas})
+
+
+@login_required(login_url='login')
+def editar_tarea_encargada(request, tarea_id):
+    """Permite modificar el título o materia de una tarea ya registrada."""
+    if request.user.is_superuser:
+        tarea = get_object_or_404(TareaEncargada, pk=tarea_id)
+    else:
+        tarea = get_object_or_404(TareaEncargada, pk=tarea_id, grupo__maestro=request.user)
+
+    if request.method == 'POST':
+        titulo = request.POST.get('titulo')
+        materia_id = request.POST.get('materia')
+        
+        if titulo and materia_id:
+            tarea.titulo = titulo
+            tarea.materia_id = materia_id
+            tarea.save()
+            return redirect('lista_tareas_encargadas')
+
+    materias = Materia.objects.all()
+    return render(request, 'alumnos/editar_tarea.html', {
+        'tarea': tarea,
+        'materias': materias
+    })
+
+
+@login_required(login_url='login')
+def eliminar_tarea_encargada(request, tarea_id):
+    if request.user.is_superuser:
+        tarea = get_object_or_404(TareaEncargada, pk=tarea_id)
+    else:
+        tarea = get_object_or_404(TareaEncargada, pk=tarea_id, grupo__maestro=request.user)
+
+    tarea.delete()
+    return redirect('lista_tareas_encargadas')

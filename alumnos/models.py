@@ -59,6 +59,69 @@ class Alumno(models.Model):
             return 'AMARILLO'  # 3 o 4 tareas debidas de 10
         else:
             return 'ROJO'  # 5 o más tareas debidas (Alerta Crítica)
+        
+    def obtener_semaforo_materia(self, grupo):
+        """
+        Calcula el semáforo para un alumno en un grupo
+        evaluando el porcentaje de entrega de tareas y las inasistencias acumuladas.
+        """
+        # 1. Obtener total de tareas del grupo y cuántas ha entregado el alumno
+        tareas_grupo = grupo.tareas.count() if hasattr(grupo, 'tareas') else 0
+        
+        if tareas_grupo > 0:
+            tareas_entregadas = self.detalles_tareas.filter(
+                tarea__grupo=grupo, 
+                entregada=True
+            ).count() if hasattr(self, 'detalles_tareas') else 0
+            
+            porcentaje_cumplimiento = (tareas_entregadas / tareas_grupo) * 100
+        else:
+            porcentaje_cumplimiento = 100.0
+
+        # 2. Obtener total de faltas acumuladas
+        total_faltas = 0
+        if hasattr(self, 'inasistencias'):
+            total_faltas = self.inasistencias.filter(grupo=grupo).aggregate(
+                total=models.Sum('total_faltas')
+            )['total'] or 0
+
+        # 3. Determinar el semáforo según los criterios
+        if porcentaje_cumplimiento < 70 or total_faltas >= 5:
+            return {
+                'color': 'rojo',
+                'codigo_hex': '#EF4444',
+                'bg_class': 'bg-red-500',
+                'text_class': 'text-red-700',
+                'bg_light': 'bg-red-50',
+                'border_class': 'border-red-200',
+                'etiqueta': 'Riesgo Alto',
+                'porcentaje_tareas': round(porcentaje_cumplimiento, 1),
+                'faltas': total_faltas
+            }
+        elif (70 <= porcentaje_cumplimiento < 85) or (3 <= total_faltas <= 4):
+            return {
+                'color': 'amarillo',
+                'codigo_hex': '#F59E0B',
+                'bg_class': 'bg-amber-500',
+                'text_class': 'text-amber-700',
+                'bg_light': 'bg-amber-50',
+                'border_class': 'border-amber-200',
+                'etiqueta': 'Atención',
+                'porcentaje_tareas': round(porcentaje_cumplimiento, 1),
+                'faltas': total_faltas
+            }
+        else:
+            return {
+                'color': 'verde',
+                'codigo_hex': '#10B981',
+                'bg_class': 'bg-emerald-500',
+                'text_class': 'text-emerald-700',
+                'bg_light': 'bg-emerald-50',
+                'border_class': 'border-emerald-200',
+                'etiqueta': 'Al Día',
+                'porcentaje_tareas': round(porcentaje_cumplimiento, 1),
+                'faltas': total_faltas
+            }
 
 class Maestro(models.Model):
     # Vinculamos al maestro con el sistema de usuarios nativo de Django para el Login

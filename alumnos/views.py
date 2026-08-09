@@ -3,6 +3,7 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from .models import Alumno, Grupo, Materia, TareaPendiente, TareaEncargada
 from .forms import TareaEncargadaForm
+from django.contrib import messages  # <--- AGREGAR ESTA LÍNEA
 
 @login_required(login_url='login')
 def dashboard_maestro(request):
@@ -363,22 +364,70 @@ def obtener_tablero_alumno(alumno):
     return tablero
 
 def login_tutor(request):
-    """
-    Permite el ingreso de tutores mediante la CURP del alumno y su fecha de nacimiento o PIN.
-    """
     if request.method == 'POST':
-        curp = request.POST.get('curp', '').strip().upper()
-        # Opcional: validación secundaria (ej. fecha de nacimiento o PIN)
+        # Buscamos 'matricula' y si no viene, 'curp'
+        identificador = request.POST.get('matricula') or request.POST.get('curp') or ''
+        identificador = identificador.strip()
+        
+        print(f"\n--- INTENTO DE LOGIN TUTOR ---")
+        print(f"VALOR RECIBIDO: '{identificador}'")
         
         try:
-            alumno = Alumno.objects.get(curp=curp)
-            # Guardamos el ID del alumno en la sesión
+            alumno_id = int(identificador)
+            alumno = Alumno.objects.get(pk=alumno_id)
+            print(f"¡ALUMNO ENCONTRADO!: {alumno.nombre} {alumno.apellido}")
+            
             request.session['alumno_tutor_id'] = alumno.id
             return redirect('tablero_tutor')
+            
+        except ValueError:
+            messages.error(request, f'El valor "{identificador}" no es un número válido.')
         except Alumno.DoesNotExist:
-            messages.error(request, 'No se encontró ningún alumno registrado con esa CURP.')
+            messages.error(request, f'No se encontró ningún alumno con el ID #{identificador}.')
 
     return render(request, 'alumnos/login_tutor.html')
+
+def tablero_tutor(request):
+    """
+    Muestra el tablero visual en tarjetas con el semáforo por materia para el tutor.
+    """
+    alumno_id = request.session.get('alumno_tutor_id')
+    
+    if not alumno_id:
+        return redirect('login_tutor')
+
+    alumno = get_object_or_404(Alumno, pk=alumno_id)
+    
+    tablero_materias = []
+    
+    # Obtenemos los grupos o la materia asociada al alumno
+    grupos = []
+    if hasattr(alumno, 'grupo') and alumno.grupo:
+        grupos.append(alumno.grupo)
+    elif hasattr(alumno, 'grupos'):
+        grupos = list(alumno.grupos.all())
+
+    for grupo in grupos:
+        semaforo_info = alumno.obtener_semaforo_materia(grupo)
+        
+        # Nombre de la materia o del grupo
+        nombre_materia = f"{grupo.grado}°{grupo.seccion}"
+        if hasattr(grupo, 'materia') and grupo.materia:
+            nombre_materia = grupo.materia.nombre
+        elif hasattr(grupo, 'nombre_materia'):
+            nombre_materia = grupo.nombre_materia
+
+        tablero_materias.append({
+            'grupo': grupo,
+            'materia': nombre_materia,
+            'semaforo': semaforo_info,
+        })
+
+    context = {
+        'alumno': alumno,
+        'tablero_materias': tablero_materias,
+    }
+    return render(request, 'alumnos/tablero_tutor.html', context)
 
 
 def tablero_tutor(request):
@@ -392,20 +441,30 @@ def tablero_tutor(request):
 
     alumno = get_object_or_404(Alumno, pk=alumno_id)
     
-    # Construimos el tablero con los semáforos de cada materia/grupo
     tablero_materias = []
     
-    # Si el alumno tiene relación con grupos/materias
-    grupos = alumno.grupos.all() if hasattr(alumno, 'grupos') else [alumno.grupo]
-    
+    # Obtenemos los grupos o la materia asociada al alumno
+    grupos = []
+    if hasattr(alumno, 'grupo') and alumno.grupo:
+        grupos.append(alumno.grupo)
+    elif hasattr(alumno, 'grupos'):
+        grupos = list(alumno.grupos.all())
+
     for grupo in grupos:
-        if grupo:
-            semaforo_info = alumno.obtener_semaforo_materia(grupo)
-            tablero_materias.append({
-                'grupo': grupo,
-                'materia': getattr(grupo, 'materia', f"{grupo.grado}°{grupo.seccion}"),
-                'semaforo': semaforo_info,
-            })
+        semaforo_info = alumno.obtener_semaforo_materia(grupo)
+        
+        # Nombre de la materia o del grupo
+        nombre_materia = f"{grupo.grado}°{grupo.seccion}"
+        if hasattr(grupo, 'materia') and grupo.materia:
+            nombre_materia = grupo.materia.nombre
+        elif hasattr(grupo, 'nombre_materia'):
+            nombre_materia = grupo.nombre_materia
+
+        tablero_materias.append({
+            'grupo': grupo,
+            'materia': nombre_materia,
+            'semaforo': semaforo_info,
+        })
 
     context = {
         'alumno': alumno,

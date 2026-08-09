@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Tutores - Consulta Escolar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-blue-100 text-[#1B365D] rounded-full flex items-center justify-center mx-auto mb-3 text-2xl font-bold">
+                🏫
+            </div>
+            <h1 class="text-2xl font-bold text-gray-900">Portal de Padres y Tutores</h1>
+            <p class="text-sm text-gray-500 mt-1">Ingresa la CURP de tu hijo(a) para consultar su avance académico y asistencias.</p>
+        </div>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="mb-4 p-3 rounded-lg text-sm bg-red-50 text-red-700 border border-red-200">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <form method="POST" class="space-y-5">
+            {% csrf_token %}
+            <div>
+                <label class="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">CURP del Alumno</label>
+                <input type="text" name="curp" required placeholder="EJ. ABCD123456HDFRRR01" 
+                       class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none uppercase font-mono text-sm tracking-wide bg-gray-50">
+            </div>
+
+            <button type="submit" class="w-full bg-[#1B365D] hover:bg-blue-900 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition-all cursor-pointer">
+                Consultar Tablero
+            </button>
+        </form>
+    </div>
+
+</body>
+</html>

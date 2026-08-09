@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tablero del Alumno - Portal de Tutores</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen text-gray-800 pb-12">
+
+    <!-- Encabezado del Portal -->
+    <header class="bg-[#1B365D] text-white shadow-md">
+        <div class="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-xl">
+                    🎓
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight">Portal de Tutores</h1>
+                    <p class="text-xs text-blue-200">Ciclo Escolar 2026 - 2027</p>
+                </div>
+            </div>
+            <a href="{% url 'logout_tutor' %}" class="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-lg transition-colors font-medium">
+                Cerrar Sesión
+            </a>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 mt-6">
+
+        <!-- Tarjeta de Perfil del Alumno -->
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center text-2xl border-2 border-slate-200">
+                    👤
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900">{{ alumno.nombre }} {{ alumno.apellido }}</h2>
+                    <p class="text-sm text-slate-500 font-medium">
+                        Grupo: <span class="text-slate-800 font-semibold">{{ alumno.grupo.grado }}°{{ alumno.grupo.seccion }}</span> 
+                        <span class="mx-1">•</span> 
+                        CURP: <span class="font-mono text-xs">{{ alumno.curp }}</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Resumen Rápido -->
+            <div class="flex gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100 text-center">
+                <div class="bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 flex-1 md:flex-none">
+                    <span class="block text-xs font-medium text-slate-500 uppercase">Materias</span>
+                    <span class="text-lg font-bold text-slate-800">{{ tablero_materias|length }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Título de Sección -->
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-slate-800">Estado por Asignatura</h3>
+            <span class="text-xs text-slate-500 font-medium">Actualizado en tiempo real</span>
+        </div>
+
+        <!-- Grid de Tarjetas por Materia -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {% for item in tablero_materias %}
+                <div class="bg-white rounded-2xl p-5 shadow-sm border {{ item.semaforo.border_class }} transition-all hover:shadow-md relative overflow-hidden">
+                    
+                    <!-- Barra lateral indicadora del color -->
+                    <div class="absolute top-0 left-0 bottom-0 w-2.5 {{ item.semaforo.bg_class }}"></div>
+
+                    <div class="pl-2">
+                        <!-- Header de la Tarjeta (Materia y Badge de Estado) -->
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <h4 class="font-bold text-slate-900 text-lg leading-snug">{{ item.materia }}</h4>
+                                <p class="text-xs text-slate-500">Prof. {{ item.grupo.maestro.get_full_name|default:"Docente asignado" }}</p>
+                            </div>
+                            <!-- Badge del Semáforo -->
+                            <span class="px-3 py-1 rounded-full text-xs font-bold {{ item.semaforo.bg_light }} {{ item.semaforo.text_class }} border {{ item.semaforo.border_class }} uppercase tracking-wider">
+                                {{ item.semaforo.etiqueta }}
+                            </span>
+                        </div>
+
+                        <hr class="border-slate-100 my-3">
+
+                        <!-- Desglose de Indicadores (Tareas + Faltas) -->
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <!-- Entregas de Tareas -->
+                            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                <span class="block text-xs text-slate-500 font-medium mb-1">Entrega de Tareas</span>
+                                <div class="flex items-baseline gap-1">
+                                    <span class="text-lg font-extrabold text-slate-800">{{ item.semaforo.porcentaje_tareas }}%</span>
+                                    <span class="text-xs text-slate-400">cumplido</span>
+                                </div>
+                                <!-- Barra de progreso visual -->
+                                <div class="w-full bg-slate-200 rounded-full h-1.5 mt-2 overflow-hidden">
+                                    <div class="{{ item.semaforo.bg_class }} h-1.5 rounded-full" style="width: {{ item.semaforo.porcentaje_tareas }}%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Inasistencias -->
+                            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                <span class="block text-xs text-slate-500 font-medium mb-1">Inasistencias</span>
+                                <div class="flex items-baseline gap-1">
+                                    <span class="text-lg font-extrabold {% if item.semaforo.faltas >= 3 %}text-amber-600{% if item.semaforo.faltas >= 5 %} text-red-600{% endif %}{% else %}text-slate-800{% endif %}">
+                                        {{ item.semaforo.faltas }}
+                                    </span>
+                                    <span class="text-xs text-slate-400">faltas en periodo</span>
+                                </div>
+                                <span class="text-[10px] text-slate-400 mt-1 block">
+                                    {% if item.semaforo.faltas == 0 %}Límite recomendado: 2{% else %}Límite crítico: 5{% endif %}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Leyenda Diagnóstica -->
+                        <div class="text-xs p-2.5 rounded-xl font-medium {{ item.semaforo.bg_light }} {{ item.semaforo.text_class }} flex items-center gap-2">
+                            <span>
+                                {% if item.semaforo.color == 'rojo' %}⚠️{% elif item.semaforo.color == 'amarillo' %}⚡{% else %}✅{% endif %}
+                            </span>
+                            <span>
+                                {% if item.semaforo.color == 'rojo' %}
+                                    El alumno requiere apoyo inmediato en tareas o regularizar asistencias.
+                                {% elif item.semaforo.color == 'amarillo' %}
+                                    Atención preventiva sugerida antes de acumular más faltas o entregas pendientes.
+                                {% else %}
+                                    Excelente desempeño y asistencia al día en esta materia.
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+
+                </div>
+            {% empty %}
+                <div class="col-span-2 bg-white rounded-2xl p-8 text-center text-slate-500 border border-slate-200">
+                    <p class="text-3xl mb-2">📋</p>
+                    <p class="font-semibold text-slate-700">No hay materias asignadas aún para este alumno.</p>
+                </div>
+            {% endfor %}
+        </div>
+
+    </main>
+
+</body>
+</html>

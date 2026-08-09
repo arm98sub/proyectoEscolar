@@ -281,3 +281,140 @@ def registrar_faltas_periodo(request, grupo_id):
         'grupo': grupo,
         'alumnos': alumnos,
     })
+    
+    
+# En alumnos/models.py dentro del modelo Alumno (o en un servicio/helper)
+
+def obtener_semaforo_materia(self, grupo):
+    """
+    Calcula el semáforo para un alumno en una materia/grupo específico
+    evaluando el porcentaje de entregas de tareas y las faltas acumuladas.
+    """
+    # 1. Obtener total de tareas del grupo y cuántas ha cumplido/entregado el alumno
+    # (Adaptar según la relación exacta de tus modelos de Tarea/DetalleTarea)
+    tareas_grupo = grupo.tareas.count()
+    
+    if tareas_grupo > 0:
+        # Contamos las tareas registradas/cumplidas por el alumno en este grupo
+        tareas_entregadas = self.detalles_tareas.filter(
+            tarea__grupo=grupo, 
+            entregada=True
+        ).count()
+        porcentaje_cumplimiento = (tareas_entregadas / tareas_grupo) * 100
+    else:
+        porcentaje_cumplimiento = 100.0  # Si no hay tareas asignadas aún, no hay riesgo
+
+    # 2. Obtener total de faltas en el periodo para esta materia/grupo
+    # Sumamos el campo 'total_faltas' de los registros del periodo
+    total_faltas = self.inasistencias.filter(grupo=grupo).aggregate(
+        total=models.Sum('total_faltas')
+    )['total'] or 0
+
+    # 3. Aplicar las reglas del semáforo combinando ambas variables
+    if porcentaje_cumplimiento < 70 or total_faltas >= 5:
+        return {
+            'color': 'rojo',
+            'codigo_hex': '#EF4444',
+            'bg_class': 'bg-red-500',
+            'text_class': 'text-red-700',
+            'bg_light': 'bg-red-50',
+            'border_class': 'border-red-200',
+            'etiqueta': 'Riesgo Alto',
+            'porcentaje_tareas': round(porcentaje_cumplimiento, 1),
+            'faltas': total_faltas
+        }
+    elif (70 <= porcentaje_cumplimiento < 85) or (3 <= total_faltas <= 4):
+        return {
+            'color': 'amarillo',
+            'codigo_hex': '#F59E0B',
+            'bg_class': 'bg-amber-500',
+            'text_class': 'text-amber-700',
+            'bg_light': 'bg-amber-50',
+            'border_class': 'border-amber-200',
+            'etiqueta': 'Atención',
+            'porcentaje_tareas': round(porcentaje_cumplimiento, 1),
+            'faltas': total_faltas
+        }
+    else:
+        return {
+            'color': 'verde',
+            'codigo_hex': '#10B981',
+            'bg_class': 'bg-emerald-500',
+            'text_class': 'text-emerald-700',
+            'bg_light': 'bg-emerald-50',
+            'border_class': 'border-emerald-200',
+            'etiqueta': 'Al Día',
+            'porcentaje_tareas': round(porcentaje_cumplimiento, 1),
+            'faltas': total_faltas
+        }
+        
+        
+def obtener_tablero_alumno(alumno):
+    tablero = []
+    # Recorremos todos los grupos/materias en los que está inscrito el alumno
+    for grupo in alumno.grupos.all():
+        semaforo_data = alumno.obtener_semaforo_materia(grupo)
+        
+        tablero.append({
+            'materia_nombre': grupo.materia.nombre if hasattr(grupo, 'materia') else f"{grupo.grado}°{grupo.seccion}",
+            'maestro': grupo.maestro.get_full_name() if grupo.maestro else 'Docente asignado',
+            'semaforo': semaforo_data,
+        })
+    return tablero
+
+def login_tutor(request):
+    """
+    Permite el ingreso de tutores mediante la CURP del alumno y su fecha de nacimiento o PIN.
+    """
+    if request.method == 'POST':
+        curp = request.POST.get('curp', '').strip().upper()
+        # Opcional: validación secundaria (ej. fecha de nacimiento o PIN)
+        
+        try:
+            alumno = Alumno.objects.get(curp=curp)
+            # Guardamos el ID del alumno en la sesión
+            request.session['alumno_tutor_id'] = alumno.id
+            return redirect('tablero_tutor')
+        except Alumno.DoesNotExist:
+            messages.error(request, 'No se encontró ningún alumno registrado con esa CURP.')
+
+    return render(request, 'alumnos/login_tutor.html')
+
+
+def tablero_tutor(request):
+    """
+    Muestra el tablero visual en tarjetas con el semáforo por materia para el tutor.
+    """
+    alumno_id = request.session.get('alumno_tutor_id')
+    
+    if not alumno_id:
+        return redirect('login_tutor')
+
+    alumno = get_object_or_404(Alumno, pk=alumno_id)
+    
+    # Construimos el tablero con los semáforos de cada materia/grupo
+    tablero_materias = []
+    
+    # Si el alumno tiene relación con grupos/materias
+    grupos = alumno.grupos.all() if hasattr(alumno, 'grupos') else [alumno.grupo]
+    
+    for grupo in grupos:
+        if grupo:
+            semaforo_info = alumno.obtener_semaforo_materia(grupo)
+            tablero_materias.append({
+                'grupo': grupo,
+                'materia': getattr(grupo, 'materia', f"{grupo.grado}°{grupo.seccion}"),
+                'semaforo': semaforo_info,
+            })
+
+    context = {
+        'alumno': alumno,
+        'tablero_materias': tablero_materias,
+    }
+    return render(request, 'alumnos/tablero_tutor.html', context)
+
+
+def logout_tutor(request):
+    """ Cierra la sesión del portal de tutores. """
+    request.session.pop('alumno_tutor_id', None)
+    return redirect('login_tutor')

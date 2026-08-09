@@ -20,5 +20,9 @@ urlpatterns = [
     path('tareas-encargadas/<int:tarea_id>/editar/', views.editar_tarea_encargada, name='editar_tarea_encargada'),
     path('tareas-encargadas/<int:tarea_id>/eliminar/', views.eliminar_tarea_encargada, name='eliminar_tarea_encargada'),
     path('grupo/<int:grupo_id>/faltas-periodo/', views.registrar_faltas_periodo, name='registrar_faltas_periodo'),
+    path('tutor/login/', views.login_tutor, name='login_tutor'),
+    path('tutor/tablero/', views.tablero_tutor, name='tablero_tutor'),
+    path('tutor/logout/', views.logout_tutor, name='logout_tutor'),
+    
     
 ]

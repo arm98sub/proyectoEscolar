@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrar Faltas por Periodo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800">
+
+    <nav class="bg-indigo-700 text-white shadow-md mb-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+            <a href="{% url 'dashboard' %}" class="font-bold text-lg tracking-wide hover:text-indigo-200 transition-colors">
+                ← Volver al Dashboard
+            </a>
+            <span class="text-sm bg-indigo-800 px-3 py-1 rounded-full text-indigo-200">
+                Grupo {{ grupo.grado }}°{{ grupo.seccion }}
+            </span>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-4 pb-12">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 md:p-8">
+            
+            <div class="mb-6 pb-4 border-b border-gray-100">
+                <h1 class="text-2xl font-bold text-gray-900">Captura de Faltas por Periodo</h1>
+                <p class="text-sm text-gray-500 mt-1">
+                    Selecciona el rango de fechas e ingresa las inasistencias totales de cada alumno.
+                </p>
+            </div>
+
+            <form method="POST" class="space-y-6">
+                {% csrf_token %}
+
+                <!-- Selección de Rango de Fechas -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                            Fecha de Inicio
+                        </label>
+                        <input type="date" name="fecha_inicio" required
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                            Fecha de Fin
+                        </label>
+                        <input type="date" name="fecha_fin" required
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+
+                <!-- Tabla de Alumnos para captura -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-200 bg-gray-50 text-xs uppercase font-semibold text-gray-500">
+                                <th class="py-3 px-4">#</th>
+                                <th class="py-3 px-4">Alumno</th>
+                                <th class="py-3 px-4 text-center w-36">Total Faltas</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            {% for alumno in alumnos %}
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="py-3 px-4 text-gray-400 font-medium">{{ forloop.counter }}</td>
+                                <td class="py-3 px-4 font-semibold text-gray-800">
+                                    {{ alumno.apellido_paterno }} {{ alumno.apellido_materno }} {{ alumno.nombre }}
+                                </td>
+                                <td class="py-3 px-4 text-center">
+                                    <input type="number" min="0" value="0" name="faltas_{{ alumno.id }}"
+                                           class="w-20 text-center py-1.5 border border-gray-300 rounded-lg text-sm font-bold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center py-8 text-gray-500">
+                                    No hay alumnos registrados en este grupo.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Botones de Acción -->
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                    <a href="{% url 'dashboard' %}" class="px-5 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors">
+                        Cancelar
+                    </a>
+                    <button type="submit" class="px-5 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 shadow-sm transition-colors">
+                        Guardar Faltas del Periodo
+                    </button>
+                </div>
+            </form>
+
+        </div>
+    </main>
+
+</body>
+</html>

@@ -105,3 +105,19 @@ class TareaEncargada(models.Model):
 
     def __str__(self):
         return f"{self.materia.nombre} - {self.titulo} ({self.grupo})"
+    
+class InasistenciaPeriodo(models.Model):
+    grupo = models.ForeignKey(Grupo, on_delete=models.CASCADE, related_name='inasistencias_periodo')
+    alumno = models.ForeignKey(Alumno, on_delete=models.CASCADE, related_name='inasistencias')
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField()
+    total_faltas = models.PositiveIntegerField(default=0)
+    fecha_registro = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Inasistencia por Periodo"
+        verbose_name_plural = "Inasistencias por Periodo"
+
+    def __str__(self):
+        return f"{self.alumno} - {self.total_faltas} faltas ({self.fecha_inicio} a {self.fecha_fin})"
+    

@@ -8,6 +8,8 @@ from .forms import TareaEncargadaForm
 def dashboard_maestro(request):
     # Obtener filtros de la URL (si existen)
     grupo_id = request.GET.get('grupo')
+    if grupo_id == "":  # Si seleccionó "Todos los grupos", lo tratamos como None
+        grupo_id = None
     nombre_buscar = request.GET.get('nombre', '').strip()
     
     # Base del QuerySet
@@ -32,11 +34,11 @@ def dashboard_maestro(request):
     context = {
         'alumnos': alumnos_lista,
         'grupos': grupos,
+        'grupo_selected': grupo_id,   # <-- OBLIGATORIO para que el template sepa cuál grupo se filtró
         'cant_verdes': verdes,
         'cant_amarillos': amarillos,
         'cant_rojos': rojos,
         'total_alumnos': total,
-        'grupo_seleccionado': int(grupo_id) if grupo_id else None,
         'nombre_buscar': nombre_buscar,
     }
     
@@ -241,3 +243,41 @@ def eliminar_tarea_encargada(request, tarea_id):
 
     tarea.delete()
     return redirect('lista_tareas_encargadas')
+
+
+from .models import InasistenciaPeriodo
+
+@login_required(login_url='login')
+def registrar_faltas_periodo(request, grupo_id):
+    if request.user.is_superuser:
+        grupo = get_object_or_404(Grupo, pk=grupo_id)
+    else:
+        grupo = get_object_or_404(Grupo, pk=grupo_id, maestro=request.user)
+
+    alumnos = grupo.alumnos.all().order_by('apellido', 'nombre')
+
+    if request.method == 'POST':
+        fecha_inicio = request.POST.get('fecha_inicio')
+        fecha_fin = request.POST.get('fecha_fin')
+
+        if fecha_inicio and fecha_fin:
+            for alumno in alumnos:
+                # Lee el número de faltas ingresado para cada alumno
+                faltas_str = request.POST.get(f'faltas_{alumno.id}', '0')
+                total_faltas = int(faltas_str) if faltas_str.isdigit() else 0
+
+                if total_faltas > 0:
+                    InasistenciaPeriodo.objects.create(
+                        grupo=grupo,
+                        alumno=alumno,
+                        fecha_inicio=fecha_inicio,
+                        fecha_fin=fecha_fin,
+                        total_faltas=total_faltas
+                    )
+
+            return redirect('dashboard')
+
+    return render(request, 'alumnos/registrar_faltas_periodo.html', {
+        'grupo': grupo,
+        'alumnos': alumnos,
+    })

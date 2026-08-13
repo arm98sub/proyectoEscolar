@@ -60,83 +60,68 @@
         </div>
 
         <!-- Grid de Tarjetas por Materia -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {% for item in tablero_materias %}
-                <div class="bg-white rounded-2xl p-5 shadow-sm border {{ item.semaforo.border_class }} transition-all hover:shadow-md relative overflow-hidden">
-                    
-                    <!-- Barra lateral indicadora del color -->
-                    <div class="absolute top-0 left-0 bottom-0 w-2.5 {{ item.semaforo.bg_class }}"></div>
+       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    {% for item in tablero_materias %}
+    <div class="bg-white rounded-2xl shadow-sm border {{ item.semaforo.border_class }} p-6 relative overflow-hidden">
+        <!-- Indicador Lateral -->
+        <div class="absolute top-0 left-0 w-2 h-full {{ item.semaforo.bg_class }}"></div>
 
-                    <div class="pl-2">
-                        <!-- Header de la Tarjeta (Materia y Badge de Estado) -->
-                        <div class="flex justify-between items-start mb-3">
-                            <div>
-                                <h4 class="font-bold text-slate-900 text-lg leading-snug">{{ item.materia }}</h4>
-                                <p class="text-xs text-slate-500">Prof. {{ item.grupo.maestro.get_full_name|default:"Docente asignado" }}</p>
-                            </div>
-                            <!-- Badge del Semáforo -->
-                            <span class="px-3 py-1 rounded-full text-xs font-bold {{ item.semaforo.bg_light }} {{ item.semaforo.text_class }} border {{ item.semaforo.border_class }} uppercase tracking-wider">
-                                {{ item.semaforo.etiqueta }}
-                            </span>
-                        </div>
-
-                        <hr class="border-slate-100 my-3">
-
-                        <!-- Desglose de Indicadores (Tareas + Faltas) -->
-                        <div class="grid grid-cols-2 gap-3 mb-4">
-                            <!-- Entregas de Tareas -->
-                            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                <span class="block text-xs text-slate-500 font-medium mb-1">Entrega de Tareas</span>
-                                <div class="flex items-baseline gap-1">
-                                    <span class="text-lg font-extrabold text-slate-800">{{ item.semaforo.porcentaje_tareas }}%</span>
-                                    <span class="text-xs text-slate-400">cumplido</span>
-                                </div>
-                                <!-- Barra de progreso visual -->
-                                <div class="w-full bg-slate-200 rounded-full h-1.5 mt-2 overflow-hidden">
-                                    <div class="{{ item.semaforo.bg_class }} h-1.5 rounded-full" style="width: {{ item.semaforo.porcentaje_tareas }}%"></div>
-                                </div>
-                            </div>
-
-                            <!-- Inasistencias -->
-                            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                <span class="block text-xs text-slate-500 font-medium mb-1">Inasistencias</span>
-                                <div class="flex items-baseline gap-1">
-                                    <span class="text-lg font-extrabold {% if item.semaforo.faltas >= 3 %}text-amber-600{% if item.semaforo.faltas >= 5 %} text-red-600{% endif %}{% else %}text-slate-800{% endif %}">
-                                        {{ item.semaforo.faltas }}
-                                    </span>
-                                    <span class="text-xs text-slate-400">faltas en periodo</span>
-                                </div>
-                                <span class="text-[10px] text-slate-400 mt-1 block">
-                                    {% if item.semaforo.faltas == 0 %}Límite recomendado: 2{% else %}Límite crítico: 5{% endif %}
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Leyenda Diagnóstica -->
-                        <div class="text-xs p-2.5 rounded-xl font-medium {{ item.semaforo.bg_light }} {{ item.semaforo.text_class }} flex items-center gap-2">
-                            <span>
-                                {% if item.semaforo.color == 'rojo' %}⚠️{% elif item.semaforo.color == 'amarillo' %}⚡{% else %}✅{% endif %}
-                            </span>
-                            <span>
-                                {% if item.semaforo.color == 'rojo' %}
-                                    El alumno requiere apoyo inmediato en tareas o regularizar asistencias.
-                                {% elif item.semaforo.color == 'amarillo' %}
-                                    Atención preventiva sugerida antes de acumular más faltas o entregas pendientes.
-                                {% else %}
-                                    Excelente desempeño y asistencia al día en esta materia.
-                                {% endif %}
-                            </span>
-                        </div>
-                    </div>
-
+        <div class="pl-3">
+            <!-- Encabezado de la Materia -->
+            <div class="flex items-start justify-between mb-4">
+                <div>
+                    <!-- NOMBRE REAL DE LA MATERIA (Ej: Matemáticas I, Español) -->
+                    <h3 class="text-xl font-bold text-slate-800">{{ item.materia_nombre }}</h3>
+                    <p class="text-xs font-medium text-slate-500">Grupo {{ item.grado_seccion }} • {{ item.maestro_nombre }}</p>
                 </div>
-            {% empty %}
-                <div class="col-span-2 bg-white rounded-2xl p-8 text-center text-slate-500 border border-slate-200">
-                    <p class="text-3xl mb-2">📋</p>
-                    <p class="font-semibold text-slate-700">No hay materias asignadas aún para este alumno.</p>
+                <span class="px-3 py-1 text-xs font-bold rounded-full text-white {{ item.semaforo.bg_class }}">
+                    {{ item.semaforo.etiqueta }}
+                </span>
+            </div>
+
+            <!-- Datos de Tareas y Faltas -->
+            <div class="grid grid-cols-2 gap-3 my-4">
+                <!-- Tareas No Entregadas -->
+                <div class="p-3 rounded-xl {{ item.semaforo.bg_light }} border {{ item.semaforo.border_class }}">
+                    <p class="text-xs font-semibold text-slate-600">Tareas No Entregadas</p>
+                    <p class="text-2xl font-black {{ item.semaforo.text_class }} mt-1">
+                        {{ item.semaforo.tareas_pendientes }}
+                    </p>
+                    <p class="text-[10px] text-slate-500 mt-0.5">pendientes en esta materia</p>
                 </div>
-            {% endfor %}
+
+                <!-- Total de Inasistencias -->
+                <div class="p-3 rounded-xl {{ item.semaforo.bg_light }} border {{ item.semaforo.border_class }}">
+                    <p class="text-xs font-semibold text-slate-600">Inasistencias</p>
+                    <p class="text-2xl font-black {{ item.semaforo.text_class }} mt-1">
+                        {{ item.semaforo.faltas }}
+                    </p>
+                    <p class="text-[10px] text-slate-500 mt-0.5">faltas en el periodo</p>
+                </div>
+            </div>
+
+            <!-- Footer de la tarjeta -->
+            <div class="text-sm text-slate-600 space-y-1 mt-2">
+    <p>
+        <span class="font-medium">Cumplimiento:</span> 
+        <strong class="{{ item.semaforo.text_class }}">{{ item.semaforo.porcentaje_tareas }}%</strong>
+    </p>
+    <p class="text-xs text-slate-500">
+        Pendientes: <span class="font-bold text-rose-600">{{ item.semaforo.tareas_pendientes }}</span> 
+        de <span class="font-bold text-slate-700">{{ item.semaforo.total_encargadas }}</span> encargadas
+    </p>
+    <p class="text-xs text-slate-500">
+        Faltas: <span class="font-bold text-slate-700">{{ item.semaforo.faltas }}</span>
+    </p>
+</div>
         </div>
+    </div>
+    {% empty %}
+    <div class="col-span-2 text-center py-10 bg-white rounded-2xl border border-dashed border-slate-300">
+        <p class="text-slate-500 text-sm">No hay materias asignadas para el grupo de este alumno.</p>
+    </div>
+    {% endfor %}
+</div>
 
     </main>
 

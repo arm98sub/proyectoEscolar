@@ -23,6 +23,7 @@ urlpatterns = [
     path('tutor/login/', views.login_tutor, name='login_tutor'),
     path('tutor/tablero/', views.tablero_tutor, name='tablero_tutor'),
     path('tutor/logout/', views.logout_tutor, name='logout_tutor'),
+    path('grupo/<int:grupo_id>/materia/<int:materia_id>/registrar-tareas/', views.registrar_tareas_periodo, name='registrar_tareas_periodo'),
     
     
 ]

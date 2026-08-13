@@ -5,6 +5,8 @@ from .models import Alumno, Grupo, Materia, TareaPendiente, TareaEncargada
 from .forms import TareaEncargadaForm
 from django.contrib import messages  # <--- AGREGAR ESTA LÍNEA
 
+from .models import Grupo, Materia, Alumno, RegistroTareasPeriodo, DetalleTareaAlumno
+
 @login_required(login_url='login')
 def dashboard_maestro(request):
     # Obtener filtros de la URL (si existen)
@@ -387,93 +389,111 @@ def login_tutor(request):
 
     return render(request, 'alumnos/login_tutor.html')
 
+
+
 def tablero_tutor(request):
-    """
-    Muestra el tablero visual en tarjetas con el semáforo por materia para el tutor.
-    """
     alumno_id = request.session.get('alumno_tutor_id')
-    
     if not alumno_id:
         return redirect('login_tutor')
 
     alumno = get_object_or_404(Alumno, pk=alumno_id)
-    
     tablero_materias = []
-    
-    # Obtenemos los grupos o la materia asociada al alumno
-    grupos = []
-    if hasattr(alumno, 'grupo') and alumno.grupo:
-        grupos.append(alumno.grupo)
-    elif hasattr(alumno, 'grupos'):
-        grupos = list(alumno.grupos.all())
 
-    for grupo in grupos:
-        semaforo_info = alumno.obtener_semaforo_materia(grupo)
+    print(f"\n================ DIAGNÓSTICO TUTOR ================")
+    print(f"Alumno: {alumno.nombre} {alumno.apellido} (ID: {alumno.id})")
+    print(f"Grupo asignado al alumno: {alumno.grupo} (Grupo ID: {alumno.grupo.id if alumno.grupo else 'Sin grupo'})")
+
+    if alumno.grupo:
+        # 1. Buscar materias directamente vinculadas al grupo del alumno
+        materias = list(Materia.objects.filter(grupo=alumno.grupo))
         
-        # Nombre de la materia o del grupo
-        nombre_materia = f"{grupo.grado}°{grupo.seccion}"
-        if hasattr(grupo, 'materia') and grupo.materia:
-            nombre_materia = grupo.materia.nombre
-        elif hasattr(grupo, 'nombre_materia'):
-            nombre_materia = grupo.nombre_materia
+        # 2. Si no encuentra por ID de grupo, buscar por grado y sección (por si hay grupos duplicados)
+        if not materias:
+            materias = list(Materia.objects.filter(
+                grupo__grado=alumno.grupo.grado, 
+                grupo__seccion=alumno.grupo.seccion
+            ))
 
-        tablero_materias.append({
-            'grupo': grupo,
-            'materia': nombre_materia,
-            'semaforo': semaforo_info,
-        })
+        # 3. Si aún no encuentra, buscar las materias de las tareas que deba el alumno
+        if not materias:
+            materias_ids = alumno.detalles_tareas.values_list('materia_id', flat=True).distinct()
+            materias = list(Materia.objects.filter(id__in=materias_ids))
+
+        print(f"Materias encontradas para mostrar: {len(materias)}")
+        for m in materias:
+            print(f" - Materia: {m.nombre} (ID: {m.id}, Grupo ID: {m.grupo_id})")
+
+        # Construir información de las tarjetas
+        for materia in materias:
+            semaforo_info = alumno.obtener_semaforo_materia(materia)
+
+            # Extraer el porcentaje si viene dentro de semaforo_info o asignarlo directamente
+            porcentaje = semaforo_info.get('porcentaje_tareas', 100.0)
+            
+            tablero_materias.append({
+                'materia_nombre': materia.nombre,
+                'semaforo': semaforo_info,
+                'porcentaje_cumplimiento': porcentaje,
+            })
+
+    print(f"==================================================\n")
 
     context = {
         'alumno': alumno,
         'tablero_materias': tablero_materias,
     }
     return render(request, 'alumnos/tablero_tutor.html', context)
-
-
-def tablero_tutor(request):
-    """
-    Muestra el tablero visual en tarjetas con el semáforo por materia para el tutor.
-    """
-    alumno_id = request.session.get('alumno_tutor_id')
-    
-    if not alumno_id:
-        return redirect('login_tutor')
-
-    alumno = get_object_or_404(Alumno, pk=alumno_id)
-    
-    tablero_materias = []
-    
-    # Obtenemos los grupos o la materia asociada al alumno
-    grupos = []
-    if hasattr(alumno, 'grupo') and alumno.grupo:
-        grupos.append(alumno.grupo)
-    elif hasattr(alumno, 'grupos'):
-        grupos = list(alumno.grupos.all())
-
-    for grupo in grupos:
-        semaforo_info = alumno.obtener_semaforo_materia(grupo)
-        
-        # Nombre de la materia o del grupo
-        nombre_materia = f"{grupo.grado}°{grupo.seccion}"
-        if hasattr(grupo, 'materia') and grupo.materia:
-            nombre_materia = grupo.materia.nombre
-        elif hasattr(grupo, 'nombre_materia'):
-            nombre_materia = grupo.nombre_materia
-
-        tablero_materias.append({
-            'grupo': grupo,
-            'materia': nombre_materia,
-            'semaforo': semaforo_info,
-        })
-
-    context = {
-        'alumno': alumno,
-        'tablero_materias': tablero_materias,
-    }
-    return render(request, 'alumnos/tablero_tutor.html', context)
-
 
 def logout_tutor(request):
-    """ Cierra la sesión del portal de tutores. """
-    request.session.pop('alumno_tutor_id', None)
+    """
+    Limpia la sesión del tutor y lo redirige a la pantalla de inicio de sesión.
+    """
+    if 'alumno_tutor_id' in request.session:
+        del request.session['alumno_tutor_id']
+    
+    messages.info(request, 'Has cerrado sesión correctamente.')
     return redirect('login_tutor')
+
+def registrar_tareas_periodo(request, grupo_id, materia_id):
+    grupo = get_object_or_404(Grupo, pk=grupo_id)
+    materia = get_object_or_404(Materia, pk=materia_id)
+    alumnos = grupo.alumnos.all().order_by('apellido_paterno', 'nombre')
+
+    if request.method == 'POST':
+        nombre_periodo = request.POST.get('nombre_periodo')
+        fecha_inicio = request.POST.get('fecha_inicio')
+        fecha_fin = request.POST.get('fecha_fin')
+        total_encargadas = int(request.POST.get('total_tareas_encargadas', 0))
+
+        # Crear el registro general del periodo
+        registro = RegistroTareasPeriodo.objects.create(
+            materia=materia,
+            grupo=grupo,
+            nombre_periodo=nombre_periodo,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            total_tareas_encargadas=total_encargadas
+        )
+
+        # Crear el detalle por cada alumno
+        for alumno in alumnos:
+            no_entregadas = int(request.POST.get(f'alumno_{alumno.id}', 0))
+            DetalleTareaAlumno.objects.create(
+                registro_periodo=registro,
+                alumno=alumno,
+                tareas_no_entregadas=no_entregadas
+            )
+
+        messages.success(request, f"Registro de tareas para '{nombre_periodo}' guardado correctamente.")
+        return redirect('registrar_tareas_periodo', grupo_id=grupo.id, materia_id=materia.id)
+
+    # Historial de periodos previamente registrados en esta materia y grupo
+    periodos_anteriores = RegistroTareasPeriodo.objects.filter(grupo=grupo, materia=materia).order_by('-fecha_creacion')
+
+    context = {
+        'grupo': grupo,
+        'materia': materia,
+        'alumnos': alumnos,
+        'periodos_anteriores': periodos_anteriores,
+    }
+    return render(request, 'alumnos/registrar_tareas_periodo.html', context)

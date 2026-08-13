@@ -120,7 +120,7 @@
                         <tr class="hover:bg-gray-50/70 transition-colors">
                             <td class="px-6 py-4 font-medium">
                                 <a href="{% url 'detalle_alumno' alumno.id %}" class="text-blue-600 hover:text-blue-900 hover:underline transition-colors">
-                                    {{ alumno.nombre }}
+                                    {{ alumno.nombre }} {{ alumno.apellido }}
                                 </a>
                             </td>
                             <td class="px-6 py-4 text-center text-gray-500">{{ alumno.grupo.grado }}°{{ alumno.grupo.seccion }}</td>

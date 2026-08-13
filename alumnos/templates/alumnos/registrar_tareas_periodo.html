@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto py-6 px-4">
+    <div class="mb-6 flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-800">Registro de Tareas por Periodo</h1>
+            <p class="text-slate-600">{{ materia.nombre }} — Grupo {{ grupo.nombre }}</p>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-4 mb-4 rounded-lg bg-emerald-100 border border-emerald-300 text-emerald-800">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="POST" class="bg-white rounded-xl shadow-md p-6 border border-slate-200 mb-8">
+        {% csrf_token %}
+        
+        <h2 class="text-lg font-semibold text-slate-700 mb-4 border-b pb-2">1. Datos del Periodo</h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Nombre / Identificador</label>
+                <input type="text" name="nombre_periodo" placeholder="Ej. Semana 1 o Bloque 1" required
+                       class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Fecha Inicio</label>
+                <input type="date" name="fecha_inicio" required
+                       class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Fecha Fin</label>
+                <input type="date" name="fecha_fin" required
+                       class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Total Tareas Encargadas</label>
+                <input type="number" min="1" name="total_tareas_encargadas" placeholder="Ej. 10" required
+                       class="w-full px-3 py-2 border border-indigo-300 bg-indigo-50 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-indigo-900">
+            </div>
+        </div>
+
+        <h2 class="text-lg font-semibold text-slate-700 mb-4 border-b pb-2">2. Captura de Tareas NO Entregadas por Alumno</h2>
+
+        <div class="overflow-x-auto mb-6">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-slate-100 text-slate-600 text-xs uppercase font-semibold">
+                        <th class="p-3 border-b">Alumno</th>
+                        <th class="p-3 border-b text-center w-48">Tareas NO Entregadas</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+                    {% for alumno in alumnos %}
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-3 font-medium text-slate-800">
+                            {{ alumno.apellido_paterno }} {{ alumno.apellido_materno }} {{ alumno.nombre }}
+                        </td>
+                        <td class="p-3 text-center">
+                            <input type="number" min="0" value="0" name="alumno_{{ alumno.id }}"
+                                   class="w-24 text-center px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none font-semibold text-rose-600">
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="flex justify-end">
+            <button type="submit" class="px-6 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 shadow-md">
+                Guardar Registro del Periodo
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

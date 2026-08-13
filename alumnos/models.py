@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.db.models import Sum
 
 class Grupo(models.Model):
     grado = models.IntegerField() # Ej: 1, 2, 3
@@ -60,68 +61,70 @@ class Alumno(models.Model):
         else:
             return 'ROJO'  # 5 o más tareas debidas (Alerta Crítica)
         
-    def obtener_semaforo_materia(self, grupo):
-        """
-        Calcula el semáforo para un alumno en un grupo
-        evaluando el porcentaje de entrega de tareas y las inasistencias acumuladas.
-        """
-        # 1. Obtener total de tareas del grupo y cuántas ha entregado el alumno
-        tareas_grupo = grupo.tareas.count() if hasattr(grupo, 'tareas') else 0
-        
-        if tareas_grupo > 0:
-            tareas_entregadas = self.detalles_tareas.filter(
-                tarea__grupo=grupo, 
-                entregada=True
-            ).count() if hasattr(self, 'detalles_tareas') else 0
-            
-            porcentaje_cumplimiento = (tareas_entregadas / tareas_grupo) * 100
+    # En alumnos/models.py dentro de la clase Alumno:
+
+    def obtener_semaforo_materia(self, materia):
+        # 1. Sumar total de tareas encargadas en esta materia en todos los periodos
+        total_encargadas = RegistroTareasPeriodo.objects.filter(
+            materia=materia,
+            grupo=self.grupo
+        ).aggregate(total=Sum('total_tareas_encargadas'))['total'] or 0
+
+        # 2. Sumar total de tareas NO entregadas por el alumno en esta materia
+        tareas_no_entregadas = DetalleTareaAlumno.objects.filter(
+            registro_periodo__materia=materia,
+            alumno=self
+        ).aggregate(total=Sum('tareas_no_entregadas'))['total'] or 0
+
+        # 3. Cálculo de porcentaje de cumplimiento acumulado
+        if total_encargadas > 0:
+            tareas_entregadas = max(0, total_encargadas - tareas_no_entregadas)
+            porcentaje_cumplimiento = round((tareas_entregadas / total_encargadas) * 100, 1)
         else:
             porcentaje_cumplimiento = 100.0
 
-        # 2. Obtener total de faltas acumuladas
-        total_faltas = 0
-        if hasattr(self, 'inasistencias'):
-            total_faltas = self.inasistencias.filter(grupo=grupo).aggregate(
-                total=models.Sum('total_faltas')
-            )['total'] or 0
+        # 4. Faltas acumuladas en esta materia
+        total_faltas = self.inasistencias.filter(materia=materia).aggregate(
+            total=Sum('total_faltas')
+        )['total'] or 0
 
-        # 3. Determinar el semáforo según los criterios
-        if porcentaje_cumplimiento < 70 or total_faltas >= 5:
-            return {
+        # 5. Evaluación de color del Semáforo
+        if tareas_no_entregadas >= 3 or total_faltas >= 5 or porcentaje_cumplimiento < 70:
+            color_data = {
                 'color': 'rojo',
-                'codigo_hex': '#EF4444',
+                'etiqueta': 'Riesgo Alto',
                 'bg_class': 'bg-red-500',
                 'text_class': 'text-red-700',
                 'bg_light': 'bg-red-50',
                 'border_class': 'border-red-200',
-                'etiqueta': 'Riesgo Alto',
-                'porcentaje_tareas': round(porcentaje_cumplimiento, 1),
-                'faltas': total_faltas
             }
-        elif (70 <= porcentaje_cumplimiento < 85) or (3 <= total_faltas <= 4):
-            return {
+        elif (1 <= tareas_no_entregadas <= 2) or (3 <= total_faltas <= 4) or (70 <= porcentaje_cumplimiento < 85):
+            color_data = {
                 'color': 'amarillo',
-                'codigo_hex': '#F59E0B',
+                'etiqueta': 'Atención',
                 'bg_class': 'bg-amber-500',
                 'text_class': 'text-amber-700',
                 'bg_light': 'bg-amber-50',
                 'border_class': 'border-amber-200',
-                'etiqueta': 'Atención',
-                'porcentaje_tareas': round(porcentaje_cumplimiento, 1),
-                'faltas': total_faltas
             }
         else:
-            return {
+            color_data = {
                 'color': 'verde',
-                'codigo_hex': '#10B981',
+                'etiqueta': 'Al Día',
                 'bg_class': 'bg-emerald-500',
                 'text_class': 'text-emerald-700',
                 'bg_light': 'bg-emerald-50',
                 'border_class': 'border-emerald-200',
-                'etiqueta': 'Al Día',
-                'porcentaje_tareas': round(porcentaje_cumplimiento, 1),
-                'faltas': total_faltas
             }
+
+        color_data.update({
+            'porcentaje_tareas': porcentaje_cumplimiento,
+            'tareas_pendientes': tareas_no_entregadas,
+            'total_encargadas': total_encargadas,
+            'faltas': total_faltas
+        })
+
+        return color_data
 
 class Maestro(models.Model):
     # Vinculamos al maestro con el sistema de usuarios nativo de Django para el Login
@@ -171,6 +174,7 @@ class TareaEncargada(models.Model):
     
 class InasistenciaPeriodo(models.Model):
     grupo = models.ForeignKey(Grupo, on_delete=models.CASCADE, related_name='inasistencias_periodo')
+    materia = models.ForeignKey(Materia, on_delete=models.CASCADE, related_name='inasistencias', null=True, blank=True)
     alumno = models.ForeignKey(Alumno, on_delete=models.CASCADE, related_name='inasistencias')
     fecha_inicio = models.DateField()
     fecha_fin = models.DateField()
@@ -182,5 +186,31 @@ class InasistenciaPeriodo(models.Model):
         verbose_name_plural = "Inasistencias por Periodo"
 
     def __str__(self):
-        return f"{self.alumno} - {self.total_faltas} faltas ({self.fecha_inicio} a {self.fecha_fin})"
-    
+        materia_str = f" - {self.materia.nombre}" if self.materia else ""
+        return f"{self.alumno}{materia_str} - {self.total_faltas} faltas"
+
+# --- NUEVOS MODELOS PARA TAREAS POR PERIODO ---
+
+class RegistroTareasPeriodo(models.Model):
+    materia = models.ForeignKey('Materia', on_delete=models.CASCADE, related_name='registros_periodos')
+    grupo = models.ForeignKey('Grupo', on_delete=models.CASCADE, related_name='registros_periodos')
+    nombre_periodo = models.CharField(max_length=100, help_text="Ej. 'Semana 1 al 15 Sep' o 'Bloque 1'")
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField()
+    total_tareas_encargadas = models.PositiveIntegerField(default=0, help_text="Total de tareas encargadas a todo el grupo en este periodo")
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.materia.nombre} - {self.nombre_periodo} ({self.grupo.nombre})"
+
+
+class DetalleTareaAlumno(models.Model):
+    registro_periodo = models.ForeignKey(RegistroTareasPeriodo, on_delete=models.CASCADE, related_name='detalles_alumnos')
+    alumno = models.ForeignKey('Alumno', on_delete=models.CASCADE, related_name='detalles_tareas_periodo')
+    tareas_no_entregadas = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('registro_periodo', 'alumno')
+
+    def __str__(self):
+        return f"{self.alumno} - {self.registro_periodo.nombre_periodo}: {self.tareas_no_entregadas} no entregadas"

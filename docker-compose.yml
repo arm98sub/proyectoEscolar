@@ -12,12 +12,17 @@ services:
     build: .
     volumes:
       - .:/code
+      - venv_data:/code/.venv
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgres://admin:secret_password@db:5432/school_db
+      - DJANGO_DEBUG=True
+      - DJANGO_SECRET_KEY=django-insecure-local-docker-only
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,testserver
     depends_on:
       - db
 
 volumes:
   postgres_data:
+  venv_data:

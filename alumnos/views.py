@@ -1,53 +1,185 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate
+from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
-from .models import Alumno, Grupo, Materia, TareaPendiente, TareaEncargada
-from .forms import TareaEncargadaForm
+from django.db import transaction
+from django.http import HttpResponseNotAllowed
+from django.views.decorators.http import require_POST
+from .models import Maestro, Materia, Grupo, Alumno, RegistroTareasPeriodo, DetalleTareaAlumno, RegistroInasistenciasPeriodo, DetalleInasistenciaAlumno
+from .forms import TareaEncargadaForm, CrearMaestroForm,CrearMateriaForm
 from django.contrib import messages  # <--- AGREGAR ESTA LÍNEA
-
 from .models import Grupo, Materia, Alumno, RegistroTareasPeriodo, DetalleTareaAlumno
+from .authz import admin_required, docente_o_admin_required, es_administrador, maestro_required
 
-@login_required(login_url='login')
-def dashboard_maestro(request):
-    # Obtener filtros de la URL (si existen)
-    grupo_id = request.GET.get('grupo')
-    if grupo_id == "":  # Si seleccionó "Todos los grupos", lo tratamos como None
-        grupo_id = None
-    nombre_buscar = request.GET.get('nombre', '').strip()
-    
-    # Base del QuerySet
-    queryset = Alumno.objects.select_related('grupo').all()
-    
-    # Aplicar filtros dinámicos
-    if nombre_buscar:
-        queryset = queryset.filter(nombre__icontains=nombre_buscar)
-    if grupo_id:
-        queryset = queryset.filter(grupo_id=grupo_id)
-        
-    # Agrupamos y calculamos semáforos para las tarjetas de métricas
-    alumnos_lista = list(queryset)
-    verdes = sum(1 for a in alumnos_lista if a.semaforo == "VERDE")
-    amarillos = sum(1 for a in alumnos_lista if a.semaforo == "AMARILLO")
-    rojos = sum(1 for a in alumnos_lista if a.semaforo == "ROJO")
-    total = len(alumnos_lista)
-    
-    # Datos para el selector de grupos en la interfaz
-    grupos = Grupo.objects.all()
-    
+@admin_required
+def registrar_maestro(request):
+    """
+    Vista exclusiva para administradores: registrar y listar docentes.
+    """
+    if request.method == 'POST':
+        form = CrearMaestroForm(request.POST)
+        if form.is_valid():
+            # 1. Extraer datos limpios
+            username = form.cleaned_data['username']
+            password = form.cleaned_data['password']
+            nombre = form.cleaned_data['nombre']
+            apellido_paterno = form.cleaned_data['apellido_paterno']
+            apellido_materno = form.cleaned_data.get('apellido_materno', '')
+
+            # 2. Crear usuario ENCRIPTANDO la contraseña obligatoriamente con create_user
+            with transaction.atomic():
+                nuevo_usuario = User.objects.create_user(
+                    username=username,
+                    password=password,
+                    first_name=nombre,
+                    last_name=apellido_paterno,
+                )
+                Maestro.objects.create(
+                    user=nuevo_usuario,
+                    nombre=nombre,
+                    apellido_paterno=apellido_paterno,
+                    apellido_materno=apellido_materno
+                )
+
+            messages.success(request, f"Maestro '{username}' registrado correctamente con acceso al sistema.")
+            return redirect('registrar_maestro')
+    else:
+        form = CrearMaestroForm()
+
+    maestros = Maestro.objects.select_related('user').all().order_by('apellido_paterno', 'nombre')
+    return render(request, 'alumnos/registrar_maestro.html', {'form': form, 'maestros': maestros})
+
+
+@admin_required
+def registrar_materia(request):
+    """
+    Vista exclusiva para administradores/ATP: dar de alta materias en masa para múltiples grupos.
+    """
+    if request.method == 'POST':
+        form = CrearMateriaForm(request.POST)
+        if form.is_valid():
+            nombre = form.cleaned_data['nombre']
+            maestro = form.cleaned_data['maestro']
+            grupos_seleccionados = form.cleaned_data['grupos']
+
+            creadas = 0
+            for grupo in grupos_seleccionados:
+                obj, created = Materia.objects.get_or_create(
+                    nombre=nombre,
+                    grupo=grupo,
+                    defaults={'maestro': maestro}
+                )
+                if not created and obj.maestro != maestro:
+                    obj.maestro = maestro
+                    obj.save()
+                creadas += 1
+
+            docente_nom = f"{maestro.nombre} {maestro.apellido_paterno}" if maestro else "Sin asignar"
+            messages.success(request, f"Materia '{nombre}' guardada y asignada a {creadas} grupo(s) para el docente {docente_nom}.")
+            return redirect('registrar_materia')
+    else:
+        form = CrearMateriaForm()
+
+    # Ordenamos por grado y seccion del grupo
+    materias_qs = Materia.objects.select_related('grupo', 'maestro').all().order_by('grupo__grado', 'grupo__seccion', 'nombre')
+    materias = list(materias_qs)
+
     context = {
-        'alumnos': alumnos_lista,
-        'grupos': grupos,
-        'grupo_selected': grupo_id,   # <-- OBLIGATORIO para que el template sepa cuál grupo se filtró
-        'cant_verdes': verdes,
-        'cant_amarillos': amarillos,
-        'cant_rojos': rojos,
-        'total_alumnos': total,
-        'nombre_buscar': nombre_buscar,
+        'form': form,
+        'materias': materias,
     }
-    
-    return render(request, 'alumnos/dashboard.html', context)
+    return render(request, 'alumnos/registrar_materia.html', context)
 
+@docente_o_admin_required
+def centro_mando_materia(request, materia_id):
+    """
+    Centro de mando único con pestañas:
+    Pestaña 1: Semáforos / Alumnos
+    Pestaña 2: Tareas por Periodo (Registro y Consulta)
+    Pestaña 3: Inasistencias por Periodo (Registro y Consulta)
+    """
+    materias = Materia.objects.select_related('grupo', 'maestro__user')
+    if not es_administrador(request.user):
+        materias = materias.filter(maestro__user=request.user)
+    materia = get_object_or_404(materias, pk=materia_id)
+    grupo = materia.grupo
+    alumnos = grupo.alumnos.all().order_by('apellido', 'nombre')
 
+    # Procesamiento de Formularios POST
+    if request.method == 'POST':
+        tipo_form = request.POST.get('tipo_formulario')
+
+        # --- A) REGISTRO DE TAREAS POR PERIODO ---
+        if tipo_form == 'guardar_tareas':
+            fecha_inicio = request.POST.get('fecha_inicio_tareas')
+            fecha_fin = request.POST.get('fecha_fin_tareas')
+            total_encargadas = int(request.POST.get('total_tareas_encargadas', 0))
+
+            with transaction.atomic():
+                registro_t = RegistroTareasPeriodo.objects.create(
+                    materia=materia,
+                    grupo=grupo,
+                    fecha_inicio=fecha_inicio,
+                    fecha_fin=fecha_fin,
+                    total_tareas_encargadas=total_encargadas
+                )
+
+                for alumno in alumnos:
+                    no_entregadas = int(request.POST.get(f'tareas_alumno_{alumno.id}', 0))
+                    DetalleTareaAlumno.objects.create(
+                        registro_periodo=registro_t,
+                        alumno=alumno,
+                        tareas_no_entregadas=no_entregadas
+                    )
+
+            messages.success(request, f"Periodo de tareas '{registro_t.nombre_periodo}' guardado correctamente.")
+            return redirect('centro_mando_materia', materia_id=materia.id)
+
+        # --- B) REGISTRO DE INASISTENCIAS POR PERIODO ---
+        elif tipo_form == 'guardar_inasistencias':
+            fecha_inicio = request.POST.get('fecha_inicio_faltas')
+            fecha_fin = request.POST.get('fecha_fin_faltas')
+
+            with transaction.atomic():
+                registro_f = RegistroInasistenciasPeriodo.objects.create(
+                    materia=materia,
+                    grupo=grupo,
+                    fecha_inicio=fecha_inicio,
+                    fecha_fin=fecha_fin
+                )
+
+                for alumno in alumnos:
+                    faltas = int(request.POST.get(f'faltas_alumno_{alumno.id}', 0))
+                    DetalleInasistenciaAlumno.objects.create(
+                        registro_periodo=registro_f,
+                        alumno=alumno,
+                        total_faltas=faltas
+                    )
+
+            messages.success(request, f"Periodo de inasistencias '{registro_f.nombre_periodo}' guardado correctamente.")
+            return redirect('centro_mando_materia', materia_id=materia.id)
+
+    # Cargar datos para el renderizado
+    alumnos_resumen = []
+    for alum in alumnos:
+        semaforo = alum.obtener_semaforo_materia(materia)
+        alumnos_resumen.append({
+            'alumno': alum,
+            'semaforo': semaforo
+        })
+
+    periodos_tareas = RegistroTareasPeriodo.objects.filter(materia=materia, grupo=grupo)
+    periodos_inasistencias = RegistroInasistenciasPeriodo.objects.filter(materia=materia, grupo=grupo)
+
+    context = {
+        'materia': materia,
+        'grupo': grupo,
+        'alumnos': alumnos,
+        'alumnos_resumen': alumnos_resumen,
+        'periodos_tareas': periodos_tareas,
+        'periodos_inasistencias': periodos_inasistencias,
+    }
+    return render(request, 'alumnos/centro_mando_materia.html', context)
 
 # 1. Vista para procesar el Inicio de Sesión
 def login_view(request):
@@ -60,7 +192,7 @@ def login_view(request):
         clave_txt = request.POST.get('password')
         
         user = authenticate(request, username=usuario_txt, password=clave_txt)
-        if user is not None:
+        if user is not None and (es_administrador(user) or hasattr(user, 'maestro')):
             login(request, user)
             return redirect('dashboard_maestro')
         else:
@@ -69,53 +201,42 @@ def login_view(request):
     return render(request, 'alumnos/login.html', {'error': error})
 
 # 2. Vista del Dashboard Protegida
-@login_required(login_url='login')  # <-- Si no ha iniciado sesión, lo manda al login
+@docente_o_admin_required
 def dashboard_maestro(request):
-    grupo_id = request.GET.get('grupo')
-    nombre_buscar = request.GET.get('nombre', '').strip()
-    
-    # CANDADO DE PRIVACIDAD: Traemos SOLO los grupos que tiene asignados el maestro actual
-    grupos_del_maestro = Grupo.objects.filter(maestro=request.user)
-    
-    # Traemos solo los alumnos que pertenecen a los grupos de este maestro
-    queryset = Alumno.objects.filter(grupo__in=grupos_del_maestro).select_related('grupo')
-    
-    # Aplicar filtros secundarios en la pantalla
-    if nombre_buscar:
-        queryset = queryset.filter(nombre__icontains=nombre_buscar)
-    if grupo_id:
-        queryset = queryset.filter(grupo_id=grupo_id)
-        
-    alumnos_lista = list(queryset)
-    verdes = sum(1 for a in alumnos_lista if a.semaforo == "VERDE")
-    amarillos = sum(1 for a in alumnos_lista if a.semaforo == "AMARILLO")
-    rojos = sum(1 for a in alumnos_lista if a.semaforo == "ROJO")
-    
-    context = {
-        'alumnos': alumnos_lista,
-        'grupos': grupos_del_maestro,  # El selector solo mostrará sus grupos
-        'cant_verdes': verdes,
-        'cant_amarillos': amarillos,
-        'cant_rojos': rojos,
-        'total_alumnos': len(alumnos_lista),
-        'grupo_seleccionado': int(grupo_id) if grupo_id else None,
-        'nombre_buscar': nombre_buscar,
-        'maestro_nombre': request.user.first_name or request.user.username
-    }
-    
-    return render(request, 'alumnos/dashboard.html', context)
+    materias = Materia.objects.select_related('grupo', 'maestro__user')
+    if not es_administrador(request.user):
+        materias = materias.filter(maestro__user=request.user)
+
+    materias_data = []
+    for materia in materias:
+        alumnos = list(materia.grupo.alumnos.all())
+        colores = [alumno.obtener_semaforo_materia(materia)['color'] for alumno in alumnos]
+        materias_data.append({
+            'materia': materia,
+            'total_alumnos': len(alumnos),
+            'rojos': colores.count('rojo'),
+            'amarillos': colores.count('amarillo'),
+            'verdes': colores.count('verde'),
+        })
+
+    return render(
+        request,
+        'alumnos/dashboard.html',
+        {'materias_data': materias_data},
+    )
 
 # 3. Vista rápida para salir
+@require_POST
 def logout_view(request):
     logout(request)
     return redirect('login')
 
 
-@login_required(login_url='login')
+@docente_o_admin_required
 def detalle_alumno(request, alumno_id):
     # Si es superusuario/admin (alan), puede ver cualquier alumno. 
     # Si es un maestro normal (alan_profe), solo ve los de sus grupos asignados.
-    if request.user.is_superuser:
+    if es_administrador(request.user):
         alumno = get_object_or_404(Alumno, id=alumno_id)
     else:
         alumno = get_object_or_404(Alumno, id=alumno_id, grupo__maestro=request.user)
@@ -129,7 +250,9 @@ def detalle_alumno(request, alumno_id):
         mis_tareas = mis_tareas.filter(materia_id=materia_id)
         materia_seleccionada = int(materia_id)
     
-    materias = Materia.objects.all()
+    materias = Materia.objects.filter(grupo=alumno.grupo)
+    if not es_administrador(request.user):
+        materias = materias.filter(maestro__user=request.user)
     
     context = {
         'alumno': alumno,
@@ -139,9 +262,13 @@ def detalle_alumno(request, alumno_id):
     }
     return render(request, 'alumnos/detalle.html', context)
 
-@login_required(login_url='login')
+@require_POST
+@docente_o_admin_required
 def marcar_tarea_entregada(request, alumno_id, tarea_id):
-    alumno = get_object_or_404(Alumno, id=alumno_id, group__maestro=request.user)
+    alumnos = Alumno.objects.all()
+    if not es_administrador(request.user):
+        alumnos = alumnos.filter(grupo__maestro=request.user)
+    alumno = get_object_or_404(alumnos, id=alumno_id)
     
     # Buscamos la tarea usando tu relación real
     tarea = get_object_or_404(alumno.detalles_tareas, id=tarea_id)
@@ -157,16 +284,23 @@ def marcar_tarea_entregada(request, alumno_id, tarea_id):
 
 # ... tus otras funciones (detalle_alumno, marcar_tarea_entregada, etc.) ...
 
-@login_required(login_url='login')
+@require_POST
+@docente_o_admin_required
 def agregar_tarea_pendiente(request, alumno_id):
-    alumno = get_object_or_404(Alumno, id=alumno_id, grupo__maestro=request.user)
+    alumnos = Alumno.objects.all()
+    if not es_administrador(request.user):
+        alumnos = alumnos.filter(grupo__maestro=request.user)
+    alumno = get_object_or_404(alumnos, id=alumno_id)
     
     if request.method == 'POST':
         materia_id = request.POST.get('materia')
         nombre_tarea = request.POST.get('nombre_tarea')
         
         if materia_id and nombre_tarea:
-            materia = get_object_or_404(Materia, id=materia_id)
+            materias = Materia.objects.filter(grupo=alumno.grupo)
+            if not es_administrador(request.user):
+                materias = materias.filter(maestro__user=request.user)
+            materia = get_object_or_404(materias, id=materia_id)
             TareaPendiente.objects.create(
                 alumno=alumno,
                 materia=materia,
@@ -176,7 +310,7 @@ def agregar_tarea_pendiente(request, alumno_id):
     return redirect('detalle_alumno', alumno_id=alumno.id)
 
 
-@login_required(login_url='login')
+@docente_o_admin_required
 def registrar_tarea_encargada(request):
     if request.method == 'POST':
         form = TareaEncargadaForm(request.POST, user=request.user)
@@ -201,10 +335,10 @@ def registrar_tarea_encargada(request):
 
 # --- GESTIÓN DE TAREAS ENCARGADAS ---
 
-@login_required(login_url='login')
+@docente_o_admin_required
 def lista_tareas_encargadas(request):
     """Muestra la lista de tareas encargadas registradas."""
-    if request.user.is_superuser:
+    if es_administrador(request.user):
         tareas = TareaEncargada.objects.all().select_related('grupo', 'materia').order_by('-id')
     else:
         tareas = TareaEncargada.objects.filter(grupo__maestro=request.user).select_related('grupo', 'materia').order_by('-id')
@@ -212,10 +346,10 @@ def lista_tareas_encargadas(request):
     return render(request, 'alumnos/lista_tareas.html', {'tareas': tareas})
 
 
-@login_required(login_url='login')
+@docente_o_admin_required
 def editar_tarea_encargada(request, tarea_id):
     """Permite modificar el título o materia de una tarea ya registrada."""
-    if request.user.is_superuser:
+    if es_administrador(request.user):
         tarea = get_object_or_404(TareaEncargada, pk=tarea_id)
     else:
         tarea = get_object_or_404(TareaEncargada, pk=tarea_id, grupo__maestro=request.user)
@@ -226,33 +360,40 @@ def editar_tarea_encargada(request, tarea_id):
         
         if titulo and materia_id:
             tarea.titulo = titulo
-            tarea.materia_id = materia_id
+            materias = Materia.objects.filter(grupo=tarea.grupo)
+            if not es_administrador(request.user):
+                materias = materias.filter(maestro__user=request.user)
+            tarea.materia = get_object_or_404(materias, pk=materia_id)
             tarea.save()
             return redirect('lista_tareas_encargadas')
 
-    materias = Materia.objects.all()
+    materias = Materia.objects.filter(grupo=tarea.grupo)
+    if not es_administrador(request.user):
+        materias = materias.filter(maestro__user=request.user)
     return render(request, 'alumnos/editar_tarea.html', {
         'tarea': tarea,
         'materias': materias
     })
 
 
-@login_required(login_url='login')
+@docente_o_admin_required
 def eliminar_tarea_encargada(request, tarea_id):
-    if request.user.is_superuser:
+    if es_administrador(request.user):
         tarea = get_object_or_404(TareaEncargada, pk=tarea_id)
     else:
         tarea = get_object_or_404(TareaEncargada, pk=tarea_id, grupo__maestro=request.user)
 
-    tarea.delete()
-    return redirect('lista_tareas_encargadas')
+    if request.method == 'POST':
+        tarea.delete()
+        return redirect('lista_tareas_encargadas')
+    return render(request, 'alumnos/confirmar_eliminar_tarea.html', {'tarea': tarea})
 
 
 from .models import InasistenciaPeriodo
 
-@login_required(login_url='login')
+@docente_o_admin_required
 def registrar_faltas_periodo(request, grupo_id):
-    if request.user.is_superuser:
+    if es_administrador(request.user):
         grupo = get_object_or_404(Grupo, pk=grupo_id)
     else:
         grupo = get_object_or_404(Grupo, pk=grupo_id, maestro=request.user)
@@ -366,42 +507,35 @@ def obtener_tablero_alumno(alumno):
     return tablero
 
 def login_tutor(request):
+    if request.user.is_authenticated and hasattr(request.user, 'tutor'):
+        return redirect('tablero_tutor')
+
     if request.method == 'POST':
-        # Buscamos 'matricula' y si no viene, 'curp'
-        identificador = request.POST.get('matricula') or request.POST.get('curp') or ''
-        identificador = identificador.strip()
-        
-        print(f"\n--- INTENTO DE LOGIN TUTOR ---")
-        print(f"VALOR RECIBIDO: '{identificador}'")
-        
-        try:
-            alumno_id = int(identificador)
-            alumno = Alumno.objects.get(pk=alumno_id)
-            print(f"¡ALUMNO ENCONTRADO!: {alumno.nombre} {alumno.apellido}")
-            
-            request.session['alumno_tutor_id'] = alumno.id
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+        user = authenticate(request, username=username, password=password)
+
+        if user is not None and hasattr(user, 'tutor'):
+            login(request, user)
             return redirect('tablero_tutor')
-            
-        except ValueError:
-            messages.error(request, f'El valor "{identificador}" no es un número válido.')
-        except Alumno.DoesNotExist:
-            messages.error(request, f'No se encontró ningún alumno con el ID #{identificador}.')
+
+        messages.error(request, 'Usuario o contraseña de tutor incorrectos.')
 
     return render(request, 'alumnos/login_tutor.html')
 
 
 
 def tablero_tutor(request):
-    alumno_id = request.session.get('alumno_tutor_id')
-    if not alumno_id:
+    if not request.user.is_authenticated or not hasattr(request.user, 'tutor'):
         return redirect('login_tutor')
 
-    alumno = get_object_or_404(Alumno, pk=alumno_id)
+    alumno_id = request.GET.get('alumno')
+    hijos = request.user.tutor.hijos.select_related('grupo').all()
+    alumno = get_object_or_404(hijos, pk=alumno_id) if alumno_id else hijos.first()
+    if alumno is None:
+        messages.info(request, 'Este tutor todavía no tiene alumnos asociados.')
+        return render(request, 'alumnos/tablero_tutor.html', {'hijos': hijos})
     tablero_materias = []
-
-    print(f"\n================ DIAGNÓSTICO TUTOR ================")
-    print(f"Alumno: {alumno.nombre} {alumno.apellido} (ID: {alumno.id})")
-    print(f"Grupo asignado al alumno: {alumno.grupo} (Grupo ID: {alumno.grupo.id if alumno.grupo else 'Sin grupo'})")
 
     if alumno.grupo:
         # 1. Buscar materias directamente vinculadas al grupo del alumno
@@ -419,10 +553,6 @@ def tablero_tutor(request):
             materias_ids = alumno.detalles_tareas.values_list('materia_id', flat=True).distinct()
             materias = list(Materia.objects.filter(id__in=materias_ids))
 
-        print(f"Materias encontradas para mostrar: {len(materias)}")
-        for m in materias:
-            print(f" - Materia: {m.nombre} (ID: {m.id}, Grupo ID: {m.grupo_id})")
-
         # Construir información de las tarjetas
         for materia in materias:
             semaforo_info = alumno.obtener_semaforo_materia(materia)
@@ -436,28 +566,33 @@ def tablero_tutor(request):
                 'porcentaje_cumplimiento': porcentaje,
             })
 
-    print(f"==================================================\n")
-
     context = {
         'alumno': alumno,
         'tablero_materias': tablero_materias,
+        'hijos': hijos,
     }
     return render(request, 'alumnos/tablero_tutor.html', context)
 
+@require_POST
 def logout_tutor(request):
     """
     Limpia la sesión del tutor y lo redirige a la pantalla de inicio de sesión.
     """
-    if 'alumno_tutor_id' in request.session:
-        del request.session['alumno_tutor_id']
-    
+    logout(request)
     messages.info(request, 'Has cerrado sesión correctamente.')
     return redirect('login_tutor')
 
+@docente_o_admin_required
 def registrar_tareas_periodo(request, grupo_id, materia_id):
-    grupo = get_object_or_404(Grupo, pk=grupo_id)
-    materia = get_object_or_404(Materia, pk=materia_id)
-    alumnos = grupo.alumnos.all().order_by('apellido_paterno', 'nombre')
+    materias = Materia.objects.select_related('grupo', 'maestro__user').filter(
+        pk=materia_id,
+        grupo_id=grupo_id,
+    )
+    if not es_administrador(request.user):
+        materias = materias.filter(maestro__user=request.user)
+    materia = get_object_or_404(materias)
+    grupo = materia.grupo
+    alumnos = grupo.alumnos.all().order_by('apellido', 'nombre')
 
     if request.method == 'POST':
         nombre_periodo = request.POST.get('nombre_periodo')
@@ -465,24 +600,23 @@ def registrar_tareas_periodo(request, grupo_id, materia_id):
         fecha_fin = request.POST.get('fecha_fin')
         total_encargadas = int(request.POST.get('total_tareas_encargadas', 0))
 
-        # Crear el registro general del periodo
-        registro = RegistroTareasPeriodo.objects.create(
-            materia=materia,
-            grupo=grupo,
-            nombre_periodo=nombre_periodo,
-            fecha_inicio=fecha_inicio,
-            fecha_fin=fecha_fin,
-            total_tareas_encargadas=total_encargadas
-        )
-
-        # Crear el detalle por cada alumno
-        for alumno in alumnos:
-            no_entregadas = int(request.POST.get(f'alumno_{alumno.id}', 0))
-            DetalleTareaAlumno.objects.create(
-                registro_periodo=registro,
-                alumno=alumno,
-                tareas_no_entregadas=no_entregadas
+        with transaction.atomic():
+            registro = RegistroTareasPeriodo.objects.create(
+                materia=materia,
+                grupo=grupo,
+                nombre_periodo=nombre_periodo,
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                total_tareas_encargadas=total_encargadas
             )
+
+            for alumno in alumnos:
+                no_entregadas = int(request.POST.get(f'alumno_{alumno.id}', 0))
+                DetalleTareaAlumno.objects.create(
+                    registro_periodo=registro,
+                    alumno=alumno,
+                    tareas_no_entregadas=no_entregadas
+                )
 
         messages.success(request, f"Registro de tareas para '{nombre_periodo}' guardado correctamente.")
         return redirect('registrar_tareas_periodo', grupo_id=grupo.id, materia_id=materia.id)

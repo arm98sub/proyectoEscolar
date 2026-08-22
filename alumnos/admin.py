@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import Alumno, Grupo, TareaPendiente,Materia,TareaEncargada
+from .models import (
+    Alumno,
+    Grupo,
+    Maestro,
+    Materia,
+    TareaEncargada,
+    TareaPendiente,
+    Tutor,
+)
 
 # Registramos los modelos para que aparezcan en el panel /admin/
 @admin.register(Grupo)
@@ -22,4 +30,5 @@ class TareaPendienteAdmin(admin.ModelAdmin):
 
 admin.site.register(Materia)
 admin.site.register(TareaEncargada)
-
+admin.site.register(Maestro)
+admin.site.register(Tutor)

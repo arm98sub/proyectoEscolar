@@ -5,6 +5,8 @@ from .api import api  # Importamos el objeto 'api' que creaste en api.py
 from alumnos.views import dashboard_maestro, login_view, logout_view,detalle_alumno, marcar_tarea_entregada,agregar_tarea_pendiente
 from alumnos import views  # <-- Importamos el archivo views de la app alumnos
 urlpatterns = [
+    path('', login_view, name='home'),
+    path('login/', login_view, name='login'),
     path('admin/', admin.site.urls),
     path("api/", api.urls),
     # La nueva ruta visual para tu junta del viernes:
@@ -24,6 +26,8 @@ urlpatterns = [
     path('tutor/tablero/', views.tablero_tutor, name='tablero_tutor'),
     path('tutor/logout/', views.logout_tutor, name='logout_tutor'),
     path('grupo/<int:grupo_id>/materia/<int:materia_id>/registrar-tareas/', views.registrar_tareas_periodo, name='registrar_tareas_periodo'),
-    
-    
+    path('docente/dashboard/', views.dashboard_maestro, name='dashboard_maestro'),
+    path('materia/<int:materia_id>/centro-mando/', views.centro_mando_materia, name='centro_mando_materia'),
+    path('admin-panel/maestros/nuevo/', views.registrar_maestro, name='registrar_maestro'),
+    path('admin-panel/materias/nueva/', views.registrar_materia, name='registrar_materia'),
 ]

@@ -5,7 +5,7 @@
     <div class="mb-6 flex justify-between items-center">
         <div>
             <h1 class="text-2xl font-bold text-slate-800">Registro de Tareas por Periodo</h1>
-            <p class="text-slate-600">{{ materia.nombre }} — Grupo {{ grupo.nombre }}</p>
+            <p class="text-slate-600">{{ materia.nombre }} — Grupo {{ grupo.grado }}°{{ grupo.seccion }}</p>
         </div>
     </div>
 
@@ -59,7 +59,7 @@
                     {% for alumno in alumnos %}
                     <tr class="hover:bg-slate-50">
                         <td class="p-3 font-medium text-slate-800">
-                            {{ alumno.apellido_paterno }} {{ alumno.apellido_materno }} {{ alumno.nombre }}
+                            {{ alumno.apellido }} {{ alumno.nombre }}
                         </td>
                         <td class="p-3 text-center">
                             <input type="number" min="0" value="0" name="alumno_{{ alumno.id }}"

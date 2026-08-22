@@ -1,6 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import User
+import datetime
+from django.db import models
 from django.db.models import Sum
+
 
 class Grupo(models.Model):
     grado = models.IntegerField() # Ej: 1, 2, 3
@@ -64,13 +67,17 @@ class Alumno(models.Model):
     # En alumnos/models.py dentro de la clase Alumno:
 
     def obtener_semaforo_materia(self, materia):
-        # 1. Sumar total de tareas encargadas en esta materia en todos los periodos
+        """
+        Calcula el semáforo y métricas acumuladas de un alumno en una materia específica
+        sumando todos los periodos registrados hasta la fecha.
+        """
+        # 1. Total de tareas encargadas en todos los periodos de esta materia
         total_encargadas = RegistroTareasPeriodo.objects.filter(
             materia=materia,
             grupo=self.grupo
         ).aggregate(total=Sum('total_tareas_encargadas'))['total'] or 0
 
-        # 2. Sumar total de tareas NO entregadas por el alumno en esta materia
+        # 2. Total de tareas NO entregadas por el alumno en esta materia
         tareas_no_entregadas = DetalleTareaAlumno.objects.filter(
             registro_periodo__materia=materia,
             alumno=self
@@ -81,14 +88,15 @@ class Alumno(models.Model):
             tareas_entregadas = max(0, total_encargadas - tareas_no_entregadas)
             porcentaje_cumplimiento = round((tareas_entregadas / total_encargadas) * 100, 1)
         else:
-            porcentaje_cumplimiento = 100.0
+            porcentaje_cumplimiento = 100.0 if tareas_no_entregadas == 0 else 0.0
 
-        # 4. Faltas acumuladas en esta materia
-        total_faltas = self.inasistencias.filter(materia=materia).aggregate(
-            total=Sum('total_faltas')
-        )['total'] or 0
+        # 4. Total de inasistencias acumuladas en esta materia por periodos
+        total_faltas = DetalleInasistenciaAlumno.objects.filter(
+            registro_periodo__materia=materia,
+            alumno=self
+        ).aggregate(total=Sum('total_faltas'))['total'] or 0
 
-        # 5. Evaluación de color del Semáforo
+        # 5. Determinación de color y niveles del Semáforo
         if tareas_no_entregadas >= 3 or total_faltas >= 5 or porcentaje_cumplimiento < 70:
             color_data = {
                 'color': 'rojo',
@@ -127,14 +135,22 @@ class Alumno(models.Model):
         return color_data
 
 class Maestro(models.Model):
-    # Vinculamos al maestro con el sistema de usuarios nativo de Django para el Login
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='perfil_maestro')
-    telefono = models.CharField(max_length=20, blank=True, null=True)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='maestro', null=True, blank=True)
+    nombre = models.CharField(max_length=100)
+    apellido_paterno = models.CharField(max_length=100)
+    apellido_materno = models.CharField(max_length=100, blank=True)
 
     def __str__(self):
-        return f"Profe. {self.user.first_name} {self.user.last_name}"
+        return f"{self.nombre} {self.apellido_paterno} {self.apellido_materno}".strip()
 
 class Tutor(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='tutor',
+        null=True,
+        blank=True,
+    )
     nombre = models.CharField(max_length=100)
     apellido = models.CharField(max_length=100)
     correo = models.EmailField(unique=True)
@@ -189,19 +205,58 @@ class InasistenciaPeriodo(models.Model):
         materia_str = f" - {self.materia.nombre}" if self.materia else ""
         return f"{self.alumno}{materia_str} - {self.total_faltas} faltas"
 
-# --- NUEVOS MODELOS PARA TAREAS POR PERIODO ---
+# Para gestionar las tareas no entregadas
+MESES_ESPANOL = {
+    1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+    5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+    9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+}
+
+def formatear_rango_fechas(fecha_inicio, fecha_fin):
+    """
+    Construye un nombre amigable para el periodo.
+    Ejemplo: 'Del 13 de mayo al 23 de junio' o 'Del 13 de mayo al 23 de mayo de 2026'
+    """
+    if not fecha_inicio or not fecha_fin:
+        return "Periodo no especificado"
+
+    dia_ini = fecha_inicio.day
+    mes_ini = MESES_ESPANOL.get(fecha_inicio.month, '')
+    
+    dia_fin = fecha_fin.day
+    mes_fin = MESES_ESPANOL.get(fecha_fin.month, '')
+
+    if mes_ini == mes_fin:
+        return f"Del {dia_ini} al {dia_fin} de {mes_fin}"
+    else:
+        return f"Del {dia_ini} de {mes_ini} al {dia_fin} de {mes_fin}"
+
+
+# ==========================================
+# 1. MODELOS DE TAREAS POR PERIODO
+# ==========================================
 
 class RegistroTareasPeriodo(models.Model):
-    materia = models.ForeignKey('Materia', on_delete=models.CASCADE, related_name='registros_periodos')
-    grupo = models.ForeignKey('Grupo', on_delete=models.CASCADE, related_name='registros_periodos')
-    nombre_periodo = models.CharField(max_length=100, help_text="Ej. 'Semana 1 al 15 Sep' o 'Bloque 1'")
+    materia = models.ForeignKey('Materia', on_delete=models.CASCADE, related_name='registros_tareas')
+    grupo = models.ForeignKey('Grupo', on_delete=models.CASCADE, related_name='registros_tareas')
+    nombre_periodo = models.CharField(max_length=150, blank=True, help_text="Se genera automáticamente según las fechas")
     fecha_inicio = models.DateField()
     fecha_fin = models.DateField()
-    total_tareas_encargadas = models.PositiveIntegerField(default=0, help_text="Total de tareas encargadas a todo el grupo en este periodo")
+    total_tareas_encargadas = models.PositiveIntegerField(default=0, help_text="Total de tareas encargadas en este periodo")
     fecha_creacion = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        verbose_name = "Registro de Tareas por Periodo"
+        verbose_name_plural = "Registros de Tareas por Periodo"
+        ordering = ['-fecha_inicio']
+
+    def save(self, *args, **kwargs):
+        # Generación automática del nombre del periodo
+        self.nombre_periodo = formatear_rango_fechas(self.fecha_inicio, self.fecha_fin)
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.materia.nombre} - {self.nombre_periodo} ({self.grupo.nombre})"
+        return f"{self.materia.nombre} - {self.nombre_periodo} ({self.grupo})"
 
 
 class DetalleTareaAlumno(models.Model):
@@ -210,7 +265,51 @@ class DetalleTareaAlumno(models.Model):
     tareas_no_entregadas = models.PositiveIntegerField(default=0)
 
     class Meta:
+        verbose_name = "Detalle de Tarea por Alumno"
+        verbose_name_plural = "Detalles de Tareas por Alumno"
         unique_together = ('registro_periodo', 'alumno')
 
     def __str__(self):
-        return f"{self.alumno} - {self.registro_periodo.nombre_periodo}: {self.tareas_no_entregadas} no entregadas"
+        return f"{self.alumno} | {self.registro_periodo.nombre_periodo}: {self.tareas_no_entregadas} no entregadas"
+
+
+# ==========================================
+# 2. MODELOS DE INASISTENCIAS POR PERIODO
+# ==========================================
+
+class RegistroInasistenciasPeriodo(models.Model):
+    materia = models.ForeignKey('Materia', on_delete=models.CASCADE, related_name='registros_inasistencias')
+    grupo = models.ForeignKey('Grupo', on_delete=models.CASCADE, related_name='registros_inasistencias')
+    nombre_periodo = models.CharField(max_length=150, blank=True, help_text="Se genera automáticamente según las fechas")
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField()
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Registro de Inasistencias por Periodo"
+        verbose_name_plural = "Registros de Inasistencias por Periodo"
+        ordering = ['-fecha_inicio']
+
+    def save(self, *args, **kwargs):
+        # Generación automática del nombre del periodo
+        self.nombre_periodo = formatear_rango_fechas(self.fecha_inicio, self.fecha_fin)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Inasistencias {self.materia.nombre} - {self.nombre_periodo} ({self.grupo})"
+
+
+class DetalleInasistenciaAlumno(models.Model):
+    registro_periodo = models.ForeignKey(RegistroInasistenciasPeriodo, on_delete=models.CASCADE, related_name='detalles_alumnos')
+    alumno = models.ForeignKey('Alumno', on_delete=models.CASCADE, related_name='detalles_inasistencias_periodo')
+    total_faltas = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Detalle de Inasistencia por Alumno"
+        verbose_name_plural = "Detalles de Inasistencias por Alumno"
+        unique_together = ('registro_periodo', 'alumno')
+
+    def __str__(self):
+        return f"{self.alumno} | {self.registro_periodo.nombre_periodo}: {self.total_faltas} faltas"
+    
+    

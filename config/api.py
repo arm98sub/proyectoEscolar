@@ -12,10 +12,42 @@ from ninja import File
 from ninja.files import UploadedFile
 from django.http import JsonResponse
 from django.http import HttpResponse
+from ninja.security import django_auth
+from alumnos.authz import es_administrador, es_maestro
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-api = NinjaAPI(title="API Proyecto Escuela", version="1.0.0")
+api = NinjaAPI(
+    title="API Proyecto Escuela",
+    version="1.0.0",
+    auth=django_auth,
+)
+
+
+def exigir_docente_o_admin(request):
+    if not (es_administrador(request.user) or es_maestro(request.user)):
+        raise HttpError(403, "No tiene permisos para acceder a este recurso.")
+
+
+def exigir_admin(request):
+    if not es_administrador(request.user):
+        raise HttpError(403, "Se requiere un usuario administrador.")
+
+
+def alumnos_visibles(request):
+    exigir_docente_o_admin(request)
+    queryset = Alumno.objects.select_related('grupo')
+    if not es_administrador(request.user):
+        queryset = queryset.filter(grupo__maestro=request.user)
+    return queryset
+
+
+def materias_visibles(request):
+    exigir_docente_o_admin(request)
+    queryset = Materia.objects.select_related('grupo', 'maestro__user')
+    if not es_administrador(request.user):
+        queryset = queryset.filter(maestro__user=request.user)
+    return queryset
 
 # --- AGREGA AQUÍ LOS SCHEMAS NUEVOS SI NO ESTABAN ---
 
@@ -96,7 +128,7 @@ def listar_alumnos_con_filtros(
     semaforo: str = None
 ):
     # Empezamos con todos los alumnos de la base de datos
-    queryset = Alumno.objects.select_related('grupo').all()
+    queryset = alumnos_visibles(request)
     
     # 1. Filtro por nombre (busca coincidencias parciales sin importar mayúsculas/minúsculas)
     if nombre:
@@ -119,22 +151,27 @@ def listar_alumnos_con_filtros(
 
 @api.get("/alerta-temprana")
 def alumnos_en_riesgo(request):
-    return Alumno.objects.filter(promedio_actual__lt=6.0)
+    return alumnos_visibles(request).filter(promedio_actual__lt=6.0)
 
 @api.get("/estado/{alumno_id}")
 def obtener_estatus_alumno(request, alumno_id: int):
-    get_object_or_404(Alumno, id=alumno_id)
+    alumno = get_object_or_404(alumnos_visibles(request), id=alumno_id)
     return {"alumno": alumno.nombre, "semaforo": alumno.semaforo}
 
 @api.get("/grupos/resumen")
 def resumen_grupos(request):
+    exigir_docente_o_admin(request)
     return {"status": "ok"}
 
 @api.post("/tareas/reportar-falta")
 def reportar_tarea_pendiente(request, payload: TareaIn):
     # 1. Validación de existencia con manejo de errores limpio
-    alumno = get_object_or_404(Alumno, id=payload.alumno_id)
-    materia = get_object_or_404(Materia, id=payload.materia_id)
+    alumno = get_object_or_404(alumnos_visibles(request), id=payload.alumno_id)
+    materia = get_object_or_404(
+        materias_visibles(request),
+        id=payload.materia_id,
+        grupo=alumno.grupo,
+    )
     
     # Limpiamos el nombre de la tarea (quitamos espacios extras al inicio o final)
     nombre_tarea_limpio = payload.nombre_tarea.strip()
@@ -178,6 +215,9 @@ def reportar_tarea_pendiente(request, payload: TareaIn):
 # 1. Obtener las materias y grupos que imparte un maestro
 @api.get("/maestros/{maestro_id}/resumen-grupos", response=List[ResumenSemaforoGrupo])
 def obtener_resumen_maestro(request, maestro_id: int):
+    exigir_docente_o_admin(request)
+    if not es_administrador(request.user) and request.user.maestro.pk != maestro_id:
+        raise HttpError(403, "No puede consultar el resumen de otro maestro.")
     # 1. Buscamos las materias de este maestro
     materias = Materia.objects.filter(maestro_id=maestro_id)
     
@@ -186,7 +226,7 @@ def obtener_resumen_maestro(request, maestro_id: int):
     for materia in materias:
         # 2. En lugar de filtros cruzados complejos, vamos directo a los grupos:
         # Si tu escuela maneja grupos generales, los recorremos todos para armar el reporte
-        grupos = Grupo.objects.all()
+        grupos = Grupo.objects.filter(pk=materia.grupo_id)
         
         for grupo in grupos:
             # Filtramos los alumnos que pertenecen a este grupo específico
@@ -219,16 +259,21 @@ def obtener_resumen_maestro(request, maestro_id: int):
 
 @api.get("/tutores/{tutor_id}/hijos", response=List[AlumnoOut])
 def listar_hijos_tutor(request, tutor_id: int):
+    if not es_administrador(request.user):
+        if not hasattr(request.user, 'tutor') or request.user.tutor.pk != tutor_id:
+            raise HttpError(403, "No puede consultar los alumnos de otro tutor.")
     tutor = get_object_or_404(Tutor, id=tutor_id)
     return tutor.hijos.select_related('grupo').all()
 
 @api.get("/alumnos/{alumno_id}/tareas-pendientes", response=List[DetalleTareaOut])
 def listar_tareas_pendientes_alumno(request, alumno_id: int):
+    get_object_or_404(alumnos_visibles(request), id=alumno_id)
     return TareaPendiente.objects.filter(alumno_id=alumno_id)
 
 # Endpoint rápido para conocer los IDs de los profesores
 @api.get("/maestros", response=List[MaestroOut])
 def listar_maestros(request):
+    exigir_admin(request)
     from alumnos.models import Maestro
     maestros = Maestro.objects.select_related('user').all()
     
@@ -250,6 +295,7 @@ def listar_maestros(request):
 # Endpoint de Alerta Temprana para el ATP / Dirección
 @api.get("/atp/alumnos-alerta", response=List[AlumnoAlertaOut])
 def obtener_alumnos_en_alerta(request, color: str = "ROJO"):
+    exigir_admin(request)
     # Aseguramos que el filtro sea en mayúsculas para que coincida con el modelo
     color_filtro = color.upper().strip()
     
@@ -286,7 +332,7 @@ def obtener_alumnos_en_alerta(request, color: str = "ROJO"):
 def obtener_historial_alumno(request, alumno_id: int):
     # Validamos que el alumno exista usando el HttpError de Ninja
     from alumnos.models import Alumno
-    alumno_existe = Alumno.objects.filter(id=alumno_id).exists()
+    alumno_existe = alumnos_visibles(request).filter(id=alumno_id).exists()
     if not alumno_existe:
         raise HttpError(404, "No Alumno matches the given query.")
         
@@ -312,6 +358,7 @@ def obtener_historial_alumno(request, alumno_id: int):
 
 @api.post("/atp/cargar-alumnos-csv")
 def cargar_alumnos_csv(request, file: UploadedFile = File(...)):
+    exigir_admin(request)
     from alumnos.models import Alumno, Grupo
     
     # Leemos el archivo subido en memoria
@@ -364,6 +411,7 @@ def cargar_alumnos_csv(request, file: UploadedFile = File(...)):
 
 @api.get("/atp/exportar-alertas-excel")
 def exportar_alertas_excel(request, color: str = "ROJO"):
+    exigir_admin(request)
     from alumnos.models import Alumno
     
     color_filtro = color.upper().strip()
@@ -454,7 +502,7 @@ def exportar_alertas_excel(request, color: str = "ROJO"):
 @api.get("/alumnos/{alumno_id}/reporte-tutor", response=ReporteTutorOut)
 def obtener_reporte_tutor(request, alumno_id: int):
     from alumnos.models import Alumno
-    alumno = Alumno.objects.filter(id=alumno_id).select_related('grupo').first()
+    alumno = alumnos_visibles(request).filter(id=alumno_id).first()
     if not alumno:
         raise HttpError(404, "Alumno no encontrado")
         

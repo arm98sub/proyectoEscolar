@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto py-8 px-4">
+    <div class="mb-6 flex justify-between items-center flex-wrap gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-800">Gestión de Materias y Asignación Docente</h1>
+            <p class="text-slate-600 text-sm">Panel de administración pedagógica (ATP / Dirección).</p>
+        </div>
+        <a href="{% url 'registrar_maestro' %}" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-medium text-xs rounded-xl transition flex items-center gap-2">
+            ← Ir a Gestión de Maestros
+        </a>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-4 mb-6 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-semibold">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Formulario de Alta de Materia -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-fit">
+            <h2 class="text-lg font-bold text-slate-800 mb-4 pb-2 border-b">Nueva Asignatura</h2>
+            <form method="POST" class="space-y-4">
+                {% csrf_token %}
+                
+                <!-- Campo Nombre -->
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">{{ form.nombre.label }}</label>
+                    {{ form.nombre }}
+                    {% if form.nombre.errors %}
+                        <p class="text-xs text-rose-600 font-medium mt-1">{{ form.nombre.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Campo Docente -->
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">{{ form.maestro.label }}</label>
+                    {{ form.maestro }}
+                    {% if form.maestro.errors %}
+                        <p class="text-xs text-rose-600 font-medium mt-1">{{ form.maestro.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Selección Rápida de Grupos -->
+                <div class="mb-4">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-xs font-bold uppercase text-slate-500">Grupos a asignar</label>
+                        <div class="flex gap-1.5 text-[11px]">
+                            <button type="button" onclick="marcarTodosGrupos(true)" 
+                                    class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2 py-1 rounded-lg transition border border-indigo-200">
+                                ✓ Todos
+                            </button>
+                            <button type="button" onclick="marcarTodosGrupos(false)" 
+                                    class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-2 py-1 rounded-lg transition border border-slate-200">
+                                ✕ Limpiar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Rejilla de Chips Interactivos (Checkboxes) -->
+                    <div class="grid grid-cols-2 gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200 max-h-48 overflow-y-auto">
+                        {% for checkbox in form.grupos %}
+                            <label class="flex items-center space-x-2 bg-white p-2 rounded-lg border border-slate-200 hover:bg-indigo-50 cursor-pointer transition select-none text-xs font-medium text-slate-700">
+                                {{ checkbox.tag }}
+                                <span>{{ checkbox.choice_label }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                    {% if form.grupos.errors %}
+                        <p class="text-xs text-rose-600 font-medium mt-1">{{ form.grupos.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <button type="submit" class="w-full mt-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl transition shadow-sm">
+                    Guardar y Asignar Materias
+                </button>
+            </form>
+        </div>
+
+        <!-- Lista de Asignaturas Registradas -->
+        <div class="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h2 class="text-lg font-bold text-slate-800 mb-4 pb-2 border-b">Catálogo de Asignaturas Asignadas</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr class="bg-slate-50 text-slate-500 text-xs uppercase border-b">
+                            <th class="p-3">Materia</th>
+                            <th class="p-3">Grupo</th>
+                            <th class="p-3">Docente a Cargo</th>
+                            <th class="p-3 text-center">Alumnos</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for m in materias %}
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="p-3 font-bold text-slate-800">
+                                {{ m.nombre }}
+                            </td>
+                            <td class="p-3">
+                                <span class="px-2.5 py-1 bg-slate-100 text-slate-700 font-semibold text-xs rounded-lg border border-slate-200">
+                                    {{ m.grupo }}
+                                </span>
+                            </td>
+                            <td class="p-3">
+                                {% if m.maestro %}
+                                    <span class="text-indigo-700 font-semibold">
+                                        {{ m.maestro.nombre }} {{ m.maestro.apellido_paterno }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-rose-500 italic text-xs font-medium">
+                                        Sin asignación
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="p-3 text-center font-semibold text-slate-600">
+                                {{ m.grupo.alumnos.count }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="p-4 text-center text-xs text-slate-400 italic">No hay materias registradas todavía.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function marcarTodosGrupos(estado) {
+        const checkboxes = document.querySelectorAll('input[name="grupos"]');
+        checkboxes.forEach(cb => cb.checked = estado);
+    }
+</script>
+{% endblock %}

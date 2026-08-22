@@ -1,153 +1,55 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control Escolar - Sistema Semáforo SisAT</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-</head>
-<body class="bg-gray-50 font-sans antialiased text-gray-900">
+{% extends 'base.html' %}
 
-    <nav class="bg-[#1B365D] text-white p-4 shadow-md">
-        <div class="max-w-7xl mx-auto flex justify-between items-center">
-            <h1 class="text-xl font-bold tracking-wide">🏫 Proyecto Escuela Web</h1>
-            <span class="text-sm bg-blue-800 px-3 py-1 rounded-full">Prof(a). {{ maestro_nombre }}</span>
-        </div>
-    </nav>
-
-    <main class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between border-b border-gray-200 pb-4">
-            <div>
-                <h2 class="text-2xl font-bold text-gray-800">Dashboard de Seguimiento Académico</h2>
-                <p class="text-sm text-gray-500">Alertas tempranas basadas en la entrega de tareas (SisAT).</p>
-            </div>
-            <!-- Botón de Acción Directa -->
-    <div>
-        <a href="{% url 'registrar_tarea_encargada' %}" class="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-xl shadow-sm transition-all duration-200">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-            </svg>
-            <span>+ Nueva Tarea Encargada</span>
-        </a>
-        <a href="{% url 'lista_tareas_encargadas' %}" class="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm rounded-xl transition-all">
-    📋 Ver Historial / Editar
-</a>
+{% block content %}
+<div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-slate-800">Panel Docente</h1>
+        <p class="text-slate-600 mt-1">Selecciona una materia para gestionar tareas, inasistencias y semáforos.</p>
     </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for item in materias_data %}
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-200 p-6 flex flex-col justify-between">
+            <div>
+                <div class="flex items-center justify-between mb-3">
+                    <span class="px-3 py-1 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-full">
+                        Grupo {{ item.materia.grupo.grado }}°{{ item.materia.grupo.seccion }}
+                    </span>
+                    <span class="text-xs font-medium text-slate-500">{{ item.total_alumnos }} Alumnos</span>
+                </div>
+                
+                <h2 class="text-xl font-bold text-slate-800 mb-4">{{ item.materia.nombre }}</h2>
+
+                <!-- Resumen rápido de semáforos -->
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 mb-6 flex justify-around text-center">
+                    <div>
+                        <span class="block text-lg font-bold text-emerald-600">{{ item.verdes }}</span>
+                        <span class="text-[10px] uppercase font-semibold text-slate-500">Al Día</span>
+                    </div>
+                    <div class="border-r border-slate-200"></div>
+                    <div>
+                        <span class="block text-lg font-bold text-amber-500">{{ item.amarillos }}</span>
+                        <span class="text-[10px] uppercase font-semibold text-slate-500">Atención</span>
+                    </div>
+                    <div class="border-r border-slate-200"></div>
+                    <div>
+                        <span class="block text-lg font-bold text-rose-600">{{ item.rojos }}</span>
+                        <span class="text-[10px] uppercase font-semibold text-slate-500">Riesgo</span>
+                    </div>
+                </div>
+            </div>
+
+            <a href="{% url 'centro_mando_materia' materia_id=item.materia.id %}" 
+               class="w-full text-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-xl transition shadow-sm">
+                Gestionar Clase
+            </a>
         </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="bg-white p-4 rounded-xl shadow-xs border border-gray-100 flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-gray-400 uppercase">Total Alumnos</p>
-                    <p class="text-2xl font-bold text-gray-800">{{ total_alumnos }}</p>
-                </div>
-                <div class="p-3 bg-blue-50 text-blue-600 rounded-lg text-xl">👥</div>
-            </div>
-            <div class="bg-white p-4 rounded-xl shadow-xs border border-gray-100 flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-gray-400 uppercase">Semáforo Verde</p>
-                    <p class="text-2xl font-bold text-green-600">{{ cant_verdes }}</p>
-                </div>
-                <div class="p-3 bg-green-50 text-green-600 rounded-lg text-xl">✅</div>
-            </div>
-            <div class="bg-white p-4 rounded-xl shadow-xs border border-gray-100 flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-gray-400 uppercase">Semáforo Amarillo</p>
-                    <p class="text-2xl font-bold text-amber-500">{{ cant_amarillos }}</p>
-                </div>
-                <div class="p-3 bg-amber-50 text-amber-600 rounded-lg text-xl">⚠️</div>
-            </div>
-            <div class="bg-white p-4 rounded-xl shadow-xs border border-gray-100 flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-gray-400 uppercase">Alerta Crítica (Rojo)</p>
-                    <p class="text-2xl font-bold text-red-600">{{ cant_rojos }}</p>
-                </div>
-                <div class="p-3 bg-red-50 text-red-600 rounded-lg text-xl">🚨</div>
-            </div>
+        {% empty %}
+        <div class="col-span-full bg-amber-50 border border-amber-200 rounded-2xl p-8 text-center text-amber-800">
+            <p class="font-semibold text-lg">No hay materias asignadas.</p>
+            <p class="text-sm text-amber-600 mt-1">Si eres administrador, asigna docentes a las materias desde el panel de control.</p>
         </div>
-
-       <div class="flex flex-wrap items-end gap-3">
-    <!-- Formulario para Filtrar la Lista -->
-    <form method="GET" action="" class="flex flex-wrap items-end gap-3">
-        {% if nombre_buscar %}
-            <input type="hidden" name="nombre" value="{{ nombre_buscar }}">
-        {% endif %}
-
-        <div class="w-full md:w-48">
-            <label class="block text-xs font-medium text-gray-600 mb-1">Filtrar por Grupo</label>
-            <select id="select-grupo-id" name="grupo" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
-                <option value="">Todos los grupos</option>
-                {% for g in grupos %}
-                    <option value="{{ g.id }}" {% if request.GET.grupo == g.id|stringformat:"s" %}selected{% endif %}>
-                        {{ g.grado }}°{{ g.seccion }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <button type="submit" class="w-full md:w-auto bg-[#1B365D] hover:bg-blue-900 text-white font-medium px-5 py-2 rounded-lg text-sm transition-colors cursor-pointer">
-            🔍 Filtrar Lista
-        </button>
-
-        <a href="?" class="w-full md:w-auto text-center bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded-lg text-sm transition-colors">
-            Limpiar
-        </a>
-    </form>
-
-    <!-- Botón directo de Registrar Faltas (Lee request.GET.grupo directamente) -->
-    {% if request.GET.grupo %}
-        <a href="/grupo/{{ request.GET.grupo }}/faltas-periodo/" 
-           class="w-full md:w-auto text-center bg-amber-500 hover:bg-amber-600 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors shadow-sm inline-block">
-            📅 Registrar Faltas del Grupo
-        </a>
-    {% endif %}
+        {% endfor %}
+    </div>
 </div>
-        <div class="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            <th class="px-6 py-3">Alumno</th>
-                            <th class="px-6 py-3 text-center">Grupo</th>
-                            <th class="px-6 py-3 text-center">Tareas Encargadas</th>
-                            <th class="px-6 py-3 text-right">Incumplimiento</th>
-                            <th class="px-6 py-3 text-center">Estado Semáforo</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 text-sm">
-                        {% for alumno in alumnos %}
-                        <tr class="hover:bg-gray-50/70 transition-colors">
-                            <td class="px-6 py-4 font-medium">
-                                <a href="{% url 'detalle_alumno' alumno.id %}" class="text-blue-600 hover:text-blue-900 hover:underline transition-colors">
-                                    {{ alumno.nombre }} {{ alumno.apellido }}
-                                </a>
-                            </td>
-                            <td class="px-6 py-4 text-center text-gray-500">{{ alumno.grupo.grado }}°{{ alumno.grupo.seccion }}</td>
-                            <td class="px-6 py-4 text-center text-gray-600 font-mono">{{ alumno.total_tareas_encargadas }}</td>
-                            <td class="px-6 py-4 text-right font-semibold {% if alumno.semaforo == 'ROJO' %}text-red-600{% elif alumno.semaforo == 'AMARILLO' %}text-amber-500{% else %}text-green-600{% endif %}">
-                                {{ alumno.porcentaje_incumplimiento_tareas }}%
-                            </td>
-                            <td class="px-6 py-4 text-center">
-                                {% if alumno.semaforo == "ROJO" %}
-                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">🚨 ROJO</span>
-                                {% elif alumno.semaforo == "AMARILLO" %}
-                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">⚠️ AMARILLO</span>
-                                {% else %}
-                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800">✅ VERDE</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="5" class="px-6 py-10 text-center text-gray-400 italic">No se encontraron alumnos con los filtros seleccionados.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </main>
-
-</body>
-</html>
+{% endblock %}

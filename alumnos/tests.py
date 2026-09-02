@@ -3,7 +3,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from .models import (
-    Alumno, Grupo, Maestro, Materia, TareaPendiente, RegistroTareasPeriodo,
+    Alumno, Grupo, Maestro, Materia, CatalogoMateria, TareaPendiente, RegistroTareasPeriodo,
     RegistroInasistenciasPeriodo,
 )
 
@@ -28,11 +28,15 @@ class ControlAccesoTests(TestCase):
         )
         cls.grupo_1 = Grupo.objects.create(grado=1, seccion='A', maestro=cls.user_1)
         cls.grupo_2 = Grupo.objects.create(grado=2, seccion='B', maestro=cls.user_2)
+        cls.catalogo_matematicas = CatalogoMateria.objects.create(nombre='Matemáticas')
+        cls.catalogo_historia = CatalogoMateria.objects.create(nombre='Historia')
         cls.materia_1 = Materia.objects.create(
-            nombre='Matemáticas', maestro=cls.maestro_1, grupo=cls.grupo_1
+            nombre='Matemáticas', catalogo=cls.catalogo_matematicas,
+            maestro=cls.maestro_1, grupo=cls.grupo_1
         )
         cls.materia_2 = Materia.objects.create(
-            nombre='Historia', maestro=cls.maestro_2, grupo=cls.grupo_2
+            nombre='Historia', catalogo=cls.catalogo_historia,
+            maestro=cls.maestro_2, grupo=cls.grupo_2
         )
         cls.alumno_1 = Alumno.objects.create(
             nombre='Ana', apellido='Uno', grupo=cls.grupo_1
@@ -170,7 +174,7 @@ class AdminDashboardCrudTests(TestCase):
         self.client.force_login(self.admin)
 
     def test_dashboard_agrupa_materias_y_las_ordena(self):
-        Materia.objects.create(nombre='Matemáticas', maestro=self.maestro_2, grupo=self.grupo_2)
+        Materia.objects.create(nombre='Matemáticas', catalogo=self.catalogo_matematicas, maestro=self.maestro_2, grupo=self.grupo_2)
         response = self.client.get(reverse('admin_dashboard'))
         self.assertEqual(response.status_code, 200)
         agrupadas = response.context['materias_agrupadas']
@@ -179,7 +183,7 @@ class AdminDashboardCrudTests(TestCase):
         self.assertEqual(matematicas['total_grupos'], 2)
 
     def test_grupos_de_materia_estan_ordenados_y_enlazan_centro_mando(self):
-        Materia.objects.create(nombre='Matemáticas', maestro=self.maestro_2, grupo=self.grupo_2)
+        Materia.objects.create(nombre='Matemáticas', catalogo=self.catalogo_matematicas, maestro=self.maestro_2, grupo=self.grupo_2)
         response = self.client.get(reverse('admin_materia_grupos', args=['matematicas']))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context['materias'].values_list('grupo__grado', flat=True)), [1, 2])
@@ -209,23 +213,31 @@ class AdminDashboardCrudTests(TestCase):
         self.assertTrue(self.user_1.check_password('test-pass'))
         self.assertEqual(self.maestro_1.nombre, 'Ada María')
 
-    def test_eliminar_maestro_requiere_confirmacion_post(self):
+    def test_no_elimina_maestro_con_historial(self):
         url = reverse('eliminar_maestro', args=[self.maestro_1.pk])
         self.assertEqual(self.client.get(url).status_code, 200)
         self.assertTrue(Maestro.objects.filter(pk=self.maestro_1.pk).exists())
         self.client.post(url)
-        self.assertFalse(Maestro.objects.filter(pk=self.maestro_1.pk).exists())
-        self.assertFalse(User.objects.filter(pk=self.user_1.pk).exists())
+        self.assertTrue(Maestro.objects.filter(pk=self.maestro_1.pk).exists())
+        self.assertTrue(User.objects.filter(pk=self.user_1.pk).exists())
+
+    def test_elimina_maestro_sin_asignaciones_tras_confirmacion(self):
+        user = User.objects.create_user('sin-asignaciones', password='test-pass')
+        maestro = Maestro.objects.create(user=user, nombre='Sin', apellido_paterno='Asignaciones')
+        self.client.post(reverse('eliminar_maestro', args=[maestro.pk]))
+        self.assertFalse(Maestro.objects.filter(pk=maestro.pk).exists())
+        self.assertFalse(User.objects.filter(pk=user.pk).exists())
 
     def test_editar_materia_modifica_solo_una_instancia(self):
-        otra = Materia.objects.create(nombre='Matemáticas', maestro=self.maestro_2, grupo=self.grupo_2)
+        otra = Materia.objects.create(nombre='Matemáticas', catalogo=self.catalogo_matematicas, maestro=self.maestro_2, grupo=self.grupo_2)
         response = self.client.post(reverse('editar_materia', args=[self.materia_1.pk]), {
-            'nombre': 'Álgebra', 'maestro': self.maestro_1.pk, 'grupo': self.grupo_1.pk,
+            'catalogo': self.catalogo_historia.pk, 'maestro': self.maestro_1.pk,
+            'grupo': self.grupo_1.pk,
         })
         self.assertRedirects(response, reverse('registrar_materia'))
         self.materia_1.refresh_from_db()
         otra.refresh_from_db()
-        self.assertEqual(self.materia_1.nombre, 'Álgebra')
+        self.assertEqual(self.materia_1.nombre, 'Historia')
         self.assertEqual(otra.nombre, 'Matemáticas')
 
     def test_eliminar_materia_requiere_post(self):
@@ -234,6 +246,38 @@ class AdminDashboardCrudTests(TestCase):
         self.assertTrue(Materia.objects.filter(pk=self.materia_1.pk).exists())
         self.client.post(url)
         self.assertFalse(Materia.objects.filter(pk=self.materia_1.pk).exists())
+
+    def test_formulario_usa_catalogo_y_solo_docentes_activos(self):
+        self.maestro_2.activo = False
+        self.maestro_2.save(update_fields=['activo'])
+        response = self.client.get(reverse('registrar_materia'))
+        form = response.context['form']
+        self.assertIn(self.catalogo_matematicas, form.fields['catalogo'].queryset)
+        self.assertIn(self.maestro_1, form.fields['maestro'].queryset)
+        self.assertNotIn(self.maestro_2, form.fields['maestro'].queryset)
+
+    def test_reasignacion_masiva_exige_confirmacion(self):
+        datos = {
+            'catalogo': self.catalogo_matematicas.pk,
+            'maestro': self.maestro_2.pk,
+            'grupos': [self.grupo_1.pk],
+        }
+        response = self.client.post(reverse('registrar_materia'), datos)
+        self.assertEqual(response.status_code, 200)
+        self.materia_1.refresh_from_db()
+        self.assertEqual(self.materia_1.maestro, self.maestro_1)
+        datos['confirmar_reasignaciones'] = 'on'
+        self.client.post(reverse('registrar_materia'), datos)
+        self.materia_1.refresh_from_db()
+        self.assertEqual(self.materia_1.maestro, self.maestro_2)
+
+    def test_desactivar_maestro_bloquea_acceso_sin_borrar_historial(self):
+        self.client.post(reverse('cambiar_estado_maestro', args=[self.maestro_1.pk]))
+        self.maestro_1.refresh_from_db()
+        self.user_1.refresh_from_db()
+        self.assertFalse(self.maestro_1.activo)
+        self.assertFalse(self.user_1.is_active)
+        self.assertTrue(Materia.objects.filter(pk=self.materia_1.pk).exists())
 
 
 class CentroMandoValidacionTests(TestCase):

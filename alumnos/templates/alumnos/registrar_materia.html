@@ -7,9 +7,10 @@
             <h1 class="text-2xl font-bold text-slate-800">Gestión de Materias y Asignación Docente</h1>
             <p class="text-slate-600 text-sm">Panel de administración pedagógica (ATP / Dirección).</p>
         </div>
-        <a href="{% url 'registrar_maestro' %}" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-medium text-xs rounded-xl transition flex items-center gap-2">
-            ← Ir a Gestión de Maestros
-        </a>
+        <div class="flex gap-2">
+            <a href="{% url 'registrar_catalogo_materia' %}" class="px-4 py-2 bg-indigo-600 text-white font-medium text-xs rounded-xl">+ Materia al catálogo</a>
+            <a href="{% url 'registrar_maestro' %}" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-medium text-xs rounded-xl">← Gestión de Maestros</a>
+        </div>
     </div>
 
     {% if messages %}
@@ -27,14 +28,19 @@
             <form method="POST" class="space-y-4">
                 {% csrf_token %}
                 
-                <!-- Campo Nombre -->
+                <!-- Materia del catálogo -->
                 <div>
-                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">{{ form.nombre.label }}</label>
-                    {{ form.nombre }}
-                    {% if form.nombre.errors %}
-                        <p class="text-xs text-rose-600 font-medium mt-1">{{ form.nombre.errors.0 }}</p>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">{{ form.catalogo.label }}</label>
+                    {{ form.catalogo }}
+                    {% if form.catalogo.errors %}
+                        <p class="text-xs text-rose-600 font-medium mt-1">{{ form.catalogo.errors.0 }}</p>
                     {% endif %}
                 </div>
+
+                <label class="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+                    {{ form.confirmar_reasignaciones }}
+                    <span>{{ form.confirmar_reasignaciones.label }}{% if form.confirmar_reasignaciones.errors %}<strong class="block text-rose-600 mt-1">{{ form.confirmar_reasignaciones.errors.0 }}</strong>{% endif %}</span>
+                </label>
 
                 <!-- Campo Docente -->
                 <div>

@@ -1,5 +1,5 @@
 from django import forms
-from .models import TareaEncargada, Materia, Grupo, Maestro
+from .models import TareaEncargada, Materia, Grupo, Maestro, CatalogoMateria
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 
@@ -88,6 +88,15 @@ class CrearMaestroForm(forms.Form):
         return password
     
 class CrearMateriaForm(forms.ModelForm):
+    catalogo = forms.ModelChoiceField(
+        queryset=CatalogoMateria.objects.none(),
+        label="Materia",
+        widget=forms.Select(attrs={'class': INPUT_CLASS}),
+    )
+    confirmar_reasignaciones = forms.BooleanField(
+        required=False,
+        label="Confirmo reemplazar al docente en grupos que ya tengan esta materia",
+    )
     # Usamos grado y seccion para ordenar correctamente
     grupos = forms.ModelMultipleChoiceField(
         queryset=Grupo.objects.all().order_by('grado', 'seccion'),
@@ -98,16 +107,11 @@ class CrearMateriaForm(forms.ModelForm):
 
     class Meta:
         model = Materia
-        fields = ['nombre', 'maestro', 'grupos']
+        fields = ['catalogo', 'maestro', 'grupos']
         labels = {
-            'nombre': 'Nombre de la Materia',
             'maestro': 'Docente Asignado',
         }
         widgets = {
-            'nombre': forms.TextInput(attrs={
-                'class': 'w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500',
-                'placeholder': 'Ej. Tecnologías, Matemáticas, Educación Física...'
-            }),
             'maestro': forms.Select(attrs={
                 'class': 'w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
             }),
@@ -115,8 +119,39 @@ class CrearMateriaForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['maestro'].queryset = Maestro.objects.all().order_by('nombre', 'apellido_paterno')
+        self.fields['catalogo'].queryset = CatalogoMateria.objects.filter(activa=True).order_by('nombre')
+        self.fields['maestro'].queryset = Maestro.objects.filter(activo=True).order_by('nombre', 'apellido_paterno')
         self.fields['maestro'].empty_label = "-- Seleccionar Docente --"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        catalogo = cleaned_data.get('catalogo')
+        maestro = cleaned_data.get('maestro')
+        grupos = cleaned_data.get('grupos')
+        if catalogo and maestro and grupos:
+            conflictos = Materia.objects.filter(
+                grupo__in=grupos,
+                catalogo=catalogo,
+            ).exclude(maestro=maestro)
+            if conflictos.exists() and not cleaned_data.get('confirmar_reasignaciones'):
+                self.add_error(
+                    'confirmar_reasignaciones',
+                    "Hay grupos con otro docente. Confirma la reasignación para continuar.",
+                )
+        return cleaned_data
+
+
+class CatalogoMateriaForm(forms.ModelForm):
+    class Meta:
+        model = CatalogoMateria
+        fields = ['nombre']
+        widgets = {'nombre': forms.TextInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej. Matemáticas 1'})}
+
+    def clean_nombre(self):
+        nombre = self.cleaned_data['nombre'].strip()
+        if CatalogoMateria.objects.filter(nombre__iexact=nombre).exists():
+            raise forms.ValidationError("Esta materia ya existe en el catálogo.")
+        return nombre
 
 
 class EditarMaestroForm(forms.ModelForm):
@@ -164,31 +199,46 @@ class EditarMaestroForm(forms.ModelForm):
 
 
 class EditarMateriaForm(forms.ModelForm):
+    catalogo = forms.ModelChoiceField(queryset=CatalogoMateria.objects.none(), label="Materia")
+    confirmar_reasignacion = forms.BooleanField(
+        required=False,
+        label="Confirmo el cambio de docente responsable",
+    )
+
     class Meta:
         model = Materia
-        fields = ['nombre', 'maestro', 'grupo']
+        fields = ['catalogo', 'maestro', 'grupo']
         widgets = {
-            'nombre': forms.TextInput(attrs={'class': INPUT_CLASS}),
             'maestro': forms.Select(attrs={'class': INPUT_CLASS}),
             'grupo': forms.Select(attrs={'class': INPUT_CLASS}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['maestro'].queryset = Maestro.objects.order_by('nombre', 'apellido_paterno')
+        self.fields['catalogo'].queryset = CatalogoMateria.objects.filter(activa=True).order_by('nombre')
+        self.fields['catalogo'].widget.attrs['class'] = INPUT_CLASS
+        self.fields['maestro'].queryset = Maestro.objects.filter(activo=True).order_by('nombre', 'apellido_paterno')
         self.fields['grupo'].queryset = Grupo.objects.order_by('grado', 'seccion')
 
     def clean(self):
         cleaned_data = super().clean()
-        nombre = cleaned_data.get('nombre')
+        catalogo = cleaned_data.get('catalogo')
         grupo = cleaned_data.get('grupo')
-        if nombre and grupo and Materia.objects.exclude(pk=self.instance.pk).filter(
-            nombre__iexact=nombre.strip(), grupo=grupo
+        maestro = cleaned_data.get('maestro')
+        if catalogo and grupo and Materia.objects.exclude(pk=self.instance.pk).filter(
+            catalogo=catalogo, grupo=grupo
         ).exists():
             raise forms.ValidationError("Ya existe una materia con este nombre para el grupo seleccionado.")
-        if nombre:
-            cleaned_data['nombre'] = nombre.strip()
+        if maestro and self.instance.pk and maestro.pk != self.instance.maestro_id and not cleaned_data.get('confirmar_reasignacion'):
+            self.add_error('confirmar_reasignacion', "Debes confirmar la reasignación del docente.")
         return cleaned_data
+
+    def save(self, commit=True):
+        materia = super().save(commit=False)
+        materia.nombre = self.cleaned_data['catalogo'].nombre
+        if commit:
+            materia.save()
+        return materia
 
 
 class PeriodoBaseForm(forms.Form):

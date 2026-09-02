@@ -2,7 +2,10 @@ from django.contrib.auth.models import User
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import Alumno, Grupo, Maestro, Materia, TareaPendiente
+from .models import (
+    Alumno, Grupo, Maestro, Materia, TareaPendiente, RegistroTareasPeriodo,
+    RegistroInasistenciasPeriodo,
+)
 
 
 class ControlAccesoTests(TestCase):
@@ -156,3 +159,122 @@ class ApiControlAccesoTests(ControlAccesoTests):
             self.client.get('/api/atp/exportar-alertas-excel').status_code,
             200,
         )
+
+
+class AdminDashboardCrudTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        ControlAccesoTests.setUpTestData.__func__(cls)
+
+    def setUp(self):
+        self.client.force_login(self.admin)
+
+    def test_dashboard_agrupa_materias_y_las_ordena(self):
+        Materia.objects.create(nombre='Matemáticas', maestro=self.maestro_2, grupo=self.grupo_2)
+        response = self.client.get(reverse('admin_dashboard'))
+        self.assertEqual(response.status_code, 200)
+        agrupadas = response.context['materias_agrupadas']
+        self.assertEqual([item['nombre'] for item in agrupadas], ['Historia', 'Matemáticas'])
+        matematicas = next(item for item in agrupadas if item['nombre'] == 'Matemáticas')
+        self.assertEqual(matematicas['total_grupos'], 2)
+
+    def test_grupos_de_materia_estan_ordenados_y_enlazan_centro_mando(self):
+        Materia.objects.create(nombre='Matemáticas', maestro=self.maestro_2, grupo=self.grupo_2)
+        response = self.client.get(reverse('admin_materia_grupos', args=['matematicas']))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['materias'].values_list('grupo__grado', flat=True)), [1, 2])
+        self.assertContains(response, reverse('centro_mando_materia', args=[self.materia_1.pk]))
+
+    def test_rutas_administrativas_rechazan_maestro(self):
+        self.client.force_login(self.user_1)
+        urls = [
+            reverse('admin_dashboard'),
+            reverse('admin_materia_grupos', args=['matematicas']),
+            reverse('editar_maestro', args=[self.maestro_1.pk]),
+            reverse('eliminar_materia', args=[self.materia_1.pk]),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 403)
+
+    def test_editar_maestro_conserva_password_si_se_deja_vacio(self):
+        response = self.client.post(reverse('editar_maestro', args=[self.maestro_1.pk]), {
+            'username': 'ada-editada', 'password': '', 'nombre': 'Ada María',
+            'apellido_paterno': 'Lovelace', 'apellido_materno': '',
+        })
+        self.assertRedirects(response, reverse('registrar_maestro'))
+        self.user_1.refresh_from_db()
+        self.maestro_1.refresh_from_db()
+        self.assertEqual(self.user_1.username, 'ada-editada')
+        self.assertTrue(self.user_1.check_password('test-pass'))
+        self.assertEqual(self.maestro_1.nombre, 'Ada María')
+
+    def test_eliminar_maestro_requiere_confirmacion_post(self):
+        url = reverse('eliminar_maestro', args=[self.maestro_1.pk])
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertTrue(Maestro.objects.filter(pk=self.maestro_1.pk).exists())
+        self.client.post(url)
+        self.assertFalse(Maestro.objects.filter(pk=self.maestro_1.pk).exists())
+        self.assertFalse(User.objects.filter(pk=self.user_1.pk).exists())
+
+    def test_editar_materia_modifica_solo_una_instancia(self):
+        otra = Materia.objects.create(nombre='Matemáticas', maestro=self.maestro_2, grupo=self.grupo_2)
+        response = self.client.post(reverse('editar_materia', args=[self.materia_1.pk]), {
+            'nombre': 'Álgebra', 'maestro': self.maestro_1.pk, 'grupo': self.grupo_1.pk,
+        })
+        self.assertRedirects(response, reverse('registrar_materia'))
+        self.materia_1.refresh_from_db()
+        otra.refresh_from_db()
+        self.assertEqual(self.materia_1.nombre, 'Álgebra')
+        self.assertEqual(otra.nombre, 'Matemáticas')
+
+    def test_eliminar_materia_requiere_post(self):
+        url = reverse('eliminar_materia', args=[self.materia_1.pk])
+        self.client.get(url)
+        self.assertTrue(Materia.objects.filter(pk=self.materia_1.pk).exists())
+        self.client.post(url)
+        self.assertFalse(Materia.objects.filter(pk=self.materia_1.pk).exists())
+
+
+class CentroMandoValidacionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        ControlAccesoTests.setUpTestData.__func__(cls)
+
+    def setUp(self):
+        self.client.force_login(self.user_1)
+        self.url = reverse('centro_mando_materia', args=[self.materia_1.pk])
+
+    def test_tareas_rechaza_numeros_invalidos_sin_crear_registro(self):
+        response = self.client.post(self.url, {
+            'tipo_formulario': 'guardar_tareas',
+            'fecha_inicio_tareas': '2026-06-01', 'fecha_fin_tareas': '2026-06-15',
+            'total_tareas_encargadas': '2', f'tareas_alumno_{self.alumno_1.pk}': '3',
+        })
+        self.assertRedirects(response, self.url)
+        self.assertFalse(RegistroTareasPeriodo.objects.exists())
+
+    def test_tareas_rechaza_valor_no_numerico(self):
+        self.client.post(self.url, {
+            'tipo_formulario': 'guardar_tareas',
+            'fecha_inicio_tareas': '2026-06-01', 'fecha_fin_tareas': '2026-06-15',
+            'total_tareas_encargadas': 'dos', f'tareas_alumno_{self.alumno_1.pk}': '0',
+        })
+        self.assertFalse(RegistroTareasPeriodo.objects.exists())
+
+    def test_inasistencias_rechaza_fechas_invertidas(self):
+        self.client.post(self.url, {
+            'tipo_formulario': 'guardar_inasistencias',
+            'fecha_inicio_faltas': '2026-06-15', 'fecha_fin_faltas': '2026-06-01',
+            f'faltas_alumno_{self.alumno_1.pk}': '1',
+        })
+        self.assertFalse(RegistroInasistenciasPeriodo.objects.exists())
+
+    def test_post_valido_crea_registros_atomicos(self):
+        self.client.post(self.url, {
+            'tipo_formulario': 'guardar_tareas',
+            'fecha_inicio_tareas': '2026-06-01', 'fecha_fin_tareas': '2026-06-15',
+            'total_tareas_encargadas': '5', f'tareas_alumno_{self.alumno_1.pk}': '2',
+        })
+        registro = RegistroTareasPeriodo.objects.get()
+        self.assertEqual(registro.detalles_alumnos.get().tareas_no_entregadas, 2)

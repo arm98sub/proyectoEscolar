@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-6xl mx-auto py-8 px-4">
+  <div class="flex items-center justify-between mb-6">
+    <div><h1 class="text-3xl font-bold">Panel administrativo</h1><p class="text-slate-500">Materias agrupadas por nombre</p></div>
+    <div class="space-x-2"><a href="{% url 'registrar_maestro' %}" class="px-4 py-2 bg-white border rounded-xl">Maestros</a><a href="{% url 'registrar_materia' %}" class="px-4 py-2 bg-indigo-600 text-white rounded-xl">Materias</a></div>
+  </div>
+  <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for item in materias_agrupadas %}
+      <a href="{% url 'admin_materia_grupos' item.identificador %}" class="block bg-white border rounded-2xl p-5 shadow-sm hover:border-indigo-400">
+        <h2 class="text-lg font-bold text-slate-800">{{ item.nombre }}</h2>
+        <p class="text-sm text-slate-500 mt-2">{{ item.total_grupos }} grupo{{ item.total_grupos|pluralize }} · {{ item.total_alumnos }} alumnos</p>
+        <p class="text-sm font-semibold text-indigo-700 mt-4">Ver grupos →</p>
+      </a>
+    {% empty %}<p class="text-slate-500">Aún no hay materias registradas.</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}

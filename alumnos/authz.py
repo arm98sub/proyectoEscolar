@@ -15,6 +15,7 @@ def es_maestro(user):
         user.is_authenticated
         and not es_administrador(user)
         and hasattr(user, "maestro")
+        and user.maestro.activo
     )
 
 

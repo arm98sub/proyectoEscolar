@@ -139,6 +139,7 @@ class Maestro(models.Model):
     nombre = models.CharField(max_length=100)
     apellido_paterno = models.CharField(max_length=100)
     apellido_materno = models.CharField(max_length=100, blank=True)
+    activo = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.nombre} {self.apellido_paterno} {self.apellido_materno}".strip()
@@ -161,8 +162,28 @@ class Tutor(models.Model):
     def __str__(self):
         return f"Tutor: {self.nombre} {self.apellido}"
 
+class CatalogoMateria(models.Model):
+    nombre = models.CharField(max_length=100, unique=True)
+    activa = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['nombre']
+        verbose_name = "Materia del catálogo"
+        verbose_name_plural = "Catálogo de materias"
+
+    def __str__(self):
+        return self.nombre
+
+
 class Materia(models.Model):
     nombre = models.CharField(max_length=100) # Ej: "Matemáticas I"
+    catalogo = models.ForeignKey(
+        CatalogoMateria,
+        on_delete=models.PROTECT,
+        related_name='asignaciones',
+        null=True,
+        blank=True,
+    )
     maestro = models.ForeignKey(Maestro, on_delete=models.CASCADE, related_name='materias')
     grupo = models.ForeignKey(Grupo, on_delete=models.CASCADE, related_name='materias')
 

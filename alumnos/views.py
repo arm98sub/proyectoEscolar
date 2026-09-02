@@ -7,10 +7,10 @@ from django.http import HttpResponseNotAllowed
 from django.http import Http404
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
-from .models import Maestro, Materia, Grupo, Alumno, RegistroTareasPeriodo, DetalleTareaAlumno, RegistroInasistenciasPeriodo, DetalleInasistenciaAlumno
+from .models import Maestro, Materia, Grupo, Alumno, CatalogoMateria, RegistroTareasPeriodo, DetalleTareaAlumno, RegistroInasistenciasPeriodo, DetalleInasistenciaAlumno
 from .forms import (
     TareaEncargadaForm, CrearMaestroForm, CrearMateriaForm, EditarMaestroForm,
-    EditarMateriaForm, RegistroTareasCentroForm, RegistroInasistenciasCentroForm,
+    EditarMateriaForm, CatalogoMateriaForm, RegistroTareasCentroForm, RegistroInasistenciasCentroForm,
 )
 from django.contrib import messages  # <--- AGREGAR ESTA LÍNEA
 from .models import Grupo, Materia, Alumno, RegistroTareasPeriodo, DetalleTareaAlumno
@@ -108,10 +108,30 @@ def editar_maestro(request, maestro_id):
     })
 
 
+@require_POST
+@admin_required
+def cambiar_estado_maestro(request, maestro_id):
+    maestro = get_object_or_404(Maestro.objects.select_related('user'), pk=maestro_id)
+    maestro.activo = not maestro.activo
+    maestro.user.is_active = maestro.activo
+    with transaction.atomic():
+        maestro.save(update_fields=['activo'])
+        maestro.user.save(update_fields=['is_active'])
+    estado = 'activado' if maestro.activo else 'desactivado'
+    messages.success(request, f"El maestro '{maestro}' fue {estado}.")
+    return redirect('registrar_maestro')
+
+
 @admin_required
 def eliminar_maestro(request, maestro_id):
     maestro = get_object_or_404(Maestro.objects.select_related('user'), pk=maestro_id)
     if request.method == 'POST':
+        if maestro.materias.exists():
+            messages.error(
+                request,
+                "No se puede eliminar un maestro con materias asignadas. Desactívalo para conservar el historial.",
+            )
+            return redirect('registrar_maestro')
         nombre = str(maestro)
         with transaction.atomic():
             maestro.user.delete()
@@ -121,7 +141,7 @@ def eliminar_maestro(request, maestro_id):
         'objeto': maestro,
         'tipo': 'maestro',
         'volver': 'registrar_maestro',
-        'advertencia': 'También se eliminarán sus materias y registros dependientes. Esta acción no se puede deshacer.',
+        'advertencia': 'Solo se puede eliminar definitivamente si no tiene materias asignadas. Si tiene historial, utiliza Desactivar.',
     })
 
 
@@ -133,20 +153,22 @@ def registrar_materia(request):
     if request.method == 'POST':
         form = CrearMateriaForm(request.POST)
         if form.is_valid():
-            nombre = form.cleaned_data['nombre']
+            catalogo = form.cleaned_data['catalogo']
+            nombre = catalogo.nombre
             maestro = form.cleaned_data['maestro']
             grupos_seleccionados = form.cleaned_data['grupos']
 
             creadas = 0
             for grupo in grupos_seleccionados:
                 obj, created = Materia.objects.get_or_create(
-                    nombre=nombre,
+                    catalogo=catalogo,
                     grupo=grupo,
-                    defaults={'maestro': maestro}
+                    defaults={'nombre': nombre, 'maestro': maestro}
                 )
-                if not created and obj.maestro != maestro:
+                if not created and (obj.maestro != maestro or obj.nombre != nombre):
                     obj.maestro = maestro
-                    obj.save()
+                    obj.nombre = nombre
+                    obj.save(update_fields=['maestro', 'nombre'])
                 creadas += 1
 
             docente_nom = f"{maestro.nombre} {maestro.apellido_paterno}" if maestro else "Sin asignar"
@@ -164,6 +186,18 @@ def registrar_materia(request):
         'materias': materias,
     }
     return render(request, 'alumnos/registrar_materia.html', context)
+
+
+@admin_required
+def registrar_catalogo_materia(request):
+    form = CatalogoMateriaForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        materia = form.save()
+        messages.success(request, f"'{materia.nombre}' se agregó al catálogo.")
+        return redirect('registrar_materia')
+    return render(request, 'alumnos/admin_form.html', {
+        'form': form, 'titulo': 'Agregar materia al catálogo', 'volver': 'registrar_materia'
+    })
 
 
 @admin_required

@@ -33,7 +33,9 @@ urlpatterns = [
     path('admin-panel/materia/<slug:identificador>/grupos/', views.admin_materia_grupos, name='admin_materia_grupos'),
     path('admin-panel/maestros/<int:maestro_id>/editar/', views.editar_maestro, name='editar_maestro'),
     path('admin-panel/maestros/<int:maestro_id>/eliminar/', views.eliminar_maestro, name='eliminar_maestro'),
+    path('admin-panel/maestros/<int:maestro_id>/estado/', views.cambiar_estado_maestro, name='cambiar_estado_maestro'),
     path('admin-panel/materias/nueva/', views.registrar_materia, name='registrar_materia'),
+    path('admin-panel/materias/catalogo/nueva/', views.registrar_catalogo_materia, name='registrar_catalogo_materia'),
     path('admin-panel/materias/<int:materia_id>/editar/', views.editar_materia, name='editar_materia'),
     path('admin-panel/materias/<int:materia_id>/eliminar/', views.eliminar_materia, name='eliminar_materia'),
 ]

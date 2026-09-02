@@ -29,5 +29,11 @@ urlpatterns = [
     path('docente/dashboard/', views.dashboard_maestro, name='dashboard_maestro'),
     path('materia/<int:materia_id>/centro-mando/', views.centro_mando_materia, name='centro_mando_materia'),
     path('admin-panel/maestros/nuevo/', views.registrar_maestro, name='registrar_maestro'),
+    path('admin-panel/dashboard/', views.admin_dashboard, name='admin_dashboard'),
+    path('admin-panel/materia/<slug:identificador>/grupos/', views.admin_materia_grupos, name='admin_materia_grupos'),
+    path('admin-panel/maestros/<int:maestro_id>/editar/', views.editar_maestro, name='editar_maestro'),
+    path('admin-panel/maestros/<int:maestro_id>/eliminar/', views.eliminar_maestro, name='eliminar_maestro'),
     path('admin-panel/materias/nueva/', views.registrar_materia, name='registrar_materia'),
+    path('admin-panel/materias/<int:materia_id>/editar/', views.editar_materia, name='editar_materia'),
+    path('admin-panel/materias/<int:materia_id>/eliminar/', views.eliminar_materia, name='eliminar_materia'),
 ]

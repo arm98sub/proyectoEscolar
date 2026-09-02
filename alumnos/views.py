@@ -4,12 +4,56 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import HttpResponseNotAllowed
+from django.http import Http404
+from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 from .models import Maestro, Materia, Grupo, Alumno, RegistroTareasPeriodo, DetalleTareaAlumno, RegistroInasistenciasPeriodo, DetalleInasistenciaAlumno
-from .forms import TareaEncargadaForm, CrearMaestroForm,CrearMateriaForm
+from .forms import (
+    TareaEncargadaForm, CrearMaestroForm, CrearMateriaForm, EditarMaestroForm,
+    EditarMateriaForm, RegistroTareasCentroForm, RegistroInasistenciasCentroForm,
+)
 from django.contrib import messages  # <--- AGREGAR ESTA LÍNEA
 from .models import Grupo, Materia, Alumno, RegistroTareasPeriodo, DetalleTareaAlumno
 from .authz import admin_required, docente_o_admin_required, es_administrador, maestro_required
+
+
+@admin_required
+def admin_dashboard(request):
+    nombres = Materia.objects.order_by('nombre').values_list('nombre', flat=True).distinct()
+    agrupadas = []
+    vistos = set()
+    for nombre in sorted(nombres, key=str.casefold):
+        clave = nombre.casefold()
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        instancias = Materia.objects.filter(nombre__iexact=nombre)
+        agrupadas.append({
+            'nombre': nombre,
+            'identificador': slugify(nombre),
+            'total_grupos': instancias.count(),
+            'total_alumnos': Alumno.objects.filter(grupo__materias__in=instancias).distinct().count(),
+        })
+    return render(request, 'alumnos/admin_dashboard.html', {'materias_agrupadas': agrupadas})
+
+
+def _materias_por_identificador(identificador):
+    nombres = Materia.objects.values_list('nombre', flat=True).distinct()
+    coincidencias = [nombre for nombre in nombres if slugify(nombre) == identificador]
+    if len(coincidencias) != 1:
+        raise Http404("Materia no encontrada")
+    return coincidencias[0], Materia.objects.filter(nombre=coincidencias[0]).select_related(
+        'grupo', 'maestro'
+    ).order_by('grupo__grado', 'grupo__seccion')
+
+
+@admin_required
+def admin_materia_grupos(request, identificador):
+    nombre, materias = _materias_por_identificador(identificador)
+    return render(request, 'alumnos/admin_materia_grupos.html', {
+        'nombre_materia': nombre,
+        'materias': materias,
+    })
 
 @admin_required
 def registrar_maestro(request):
@@ -48,6 +92,37 @@ def registrar_maestro(request):
 
     maestros = Maestro.objects.select_related('user').all().order_by('apellido_paterno', 'nombre')
     return render(request, 'alumnos/registrar_maestro.html', {'form': form, 'maestros': maestros})
+
+
+@admin_required
+def editar_maestro(request, maestro_id):
+    maestro = get_object_or_404(Maestro.objects.select_related('user'), pk=maestro_id)
+    form = EditarMaestroForm(request.POST or None, instance=maestro)
+    if request.method == 'POST' and form.is_valid():
+        with transaction.atomic():
+            form.save()
+        messages.success(request, "Los datos del maestro se actualizaron correctamente.")
+        return redirect('registrar_maestro')
+    return render(request, 'alumnos/admin_form.html', {
+        'form': form, 'titulo': 'Editar maestro', 'volver': 'registrar_maestro'
+    })
+
+
+@admin_required
+def eliminar_maestro(request, maestro_id):
+    maestro = get_object_or_404(Maestro.objects.select_related('user'), pk=maestro_id)
+    if request.method == 'POST':
+        nombre = str(maestro)
+        with transaction.atomic():
+            maestro.user.delete()
+        messages.success(request, f"El maestro '{nombre}' fue eliminado.")
+        return redirect('registrar_maestro')
+    return render(request, 'alumnos/admin_confirmar_eliminar.html', {
+        'objeto': maestro,
+        'tipo': 'maestro',
+        'volver': 'registrar_maestro',
+        'advertencia': 'También se eliminarán sus materias y registros dependientes. Esta acción no se puede deshacer.',
+    })
 
 
 @admin_required
@@ -90,6 +165,35 @@ def registrar_materia(request):
     }
     return render(request, 'alumnos/registrar_materia.html', context)
 
+
+@admin_required
+def editar_materia(request, materia_id):
+    materia = get_object_or_404(Materia, pk=materia_id)
+    form = EditarMateriaForm(request.POST or None, instance=materia)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, "La instancia de materia se actualizó correctamente.")
+        return redirect('registrar_materia')
+    return render(request, 'alumnos/admin_form.html', {
+        'form': form, 'titulo': 'Editar materia y grupo', 'volver': 'registrar_materia'
+    })
+
+
+@admin_required
+def eliminar_materia(request, materia_id):
+    materia = get_object_or_404(Materia.objects.select_related('grupo'), pk=materia_id)
+    if request.method == 'POST':
+        nombre = str(materia)
+        materia.delete()
+        messages.success(request, f"La instancia '{nombre}' fue eliminada.")
+        return redirect('registrar_materia')
+    return render(request, 'alumnos/admin_confirmar_eliminar.html', {
+        'objeto': materia,
+        'tipo': 'materia',
+        'volver': 'registrar_materia',
+        'advertencia': 'Se eliminarán sus registros dependientes. Las otras instancias de la misma materia no cambiarán.',
+    })
+
 @docente_o_admin_required
 def centro_mando_materia(request, materia_id):
     """
@@ -111,25 +215,32 @@ def centro_mando_materia(request, materia_id):
 
         # --- A) REGISTRO DE TAREAS POR PERIODO ---
         if tipo_form == 'guardar_tareas':
-            fecha_inicio = request.POST.get('fecha_inicio_tareas')
-            fecha_fin = request.POST.get('fecha_fin_tareas')
-            total_encargadas = int(request.POST.get('total_tareas_encargadas', 0))
+            datos = request.POST.copy()
+            datos['fecha_inicio'] = request.POST.get('fecha_inicio_tareas', '')
+            datos['fecha_fin'] = request.POST.get('fecha_fin_tareas', '')
+            for alumno in alumnos:
+                datos[f'alumno_{alumno.pk}'] = request.POST.get(f'tareas_alumno_{alumno.pk}', '')
+            form = RegistroTareasCentroForm(datos, alumnos=alumnos)
+            if not form.is_valid():
+                for errores in form.errors.values():
+                    for error in errores:
+                        messages.error(request, error)
+                return redirect('centro_mando_materia', materia_id=materia.id)
 
             with transaction.atomic():
                 registro_t = RegistroTareasPeriodo.objects.create(
                     materia=materia,
                     grupo=grupo,
-                    fecha_inicio=fecha_inicio,
-                    fecha_fin=fecha_fin,
-                    total_tareas_encargadas=total_encargadas
+                    fecha_inicio=form.cleaned_data['fecha_inicio'],
+                    fecha_fin=form.cleaned_data['fecha_fin'],
+                    total_tareas_encargadas=form.cleaned_data['total_tareas_encargadas']
                 )
 
                 for alumno in alumnos:
-                    no_entregadas = int(request.POST.get(f'tareas_alumno_{alumno.id}', 0))
                     DetalleTareaAlumno.objects.create(
                         registro_periodo=registro_t,
                         alumno=alumno,
-                        tareas_no_entregadas=no_entregadas
+                        tareas_no_entregadas=form.cleaned_data[f'alumno_{alumno.pk}']
                     )
 
             messages.success(request, f"Periodo de tareas '{registro_t.nombre_periodo}' guardado correctamente.")
@@ -137,23 +248,31 @@ def centro_mando_materia(request, materia_id):
 
         # --- B) REGISTRO DE INASISTENCIAS POR PERIODO ---
         elif tipo_form == 'guardar_inasistencias':
-            fecha_inicio = request.POST.get('fecha_inicio_faltas')
-            fecha_fin = request.POST.get('fecha_fin_faltas')
+            datos = request.POST.copy()
+            datos['fecha_inicio'] = request.POST.get('fecha_inicio_faltas', '')
+            datos['fecha_fin'] = request.POST.get('fecha_fin_faltas', '')
+            for alumno in alumnos:
+                datos[f'alumno_{alumno.pk}'] = request.POST.get(f'faltas_alumno_{alumno.pk}', '')
+            form = RegistroInasistenciasCentroForm(datos, alumnos=alumnos)
+            if not form.is_valid():
+                for errores in form.errors.values():
+                    for error in errores:
+                        messages.error(request, error)
+                return redirect('centro_mando_materia', materia_id=materia.id)
 
             with transaction.atomic():
                 registro_f = RegistroInasistenciasPeriodo.objects.create(
                     materia=materia,
                     grupo=grupo,
-                    fecha_inicio=fecha_inicio,
-                    fecha_fin=fecha_fin
+                    fecha_inicio=form.cleaned_data['fecha_inicio'],
+                    fecha_fin=form.cleaned_data['fecha_fin']
                 )
 
                 for alumno in alumnos:
-                    faltas = int(request.POST.get(f'faltas_alumno_{alumno.id}', 0))
                     DetalleInasistenciaAlumno.objects.create(
                         registro_periodo=registro_f,
                         alumno=alumno,
-                        total_faltas=faltas
+                        total_faltas=form.cleaned_data[f'alumno_{alumno.pk}']
                     )
 
             messages.success(request, f"Periodo de inasistencias '{registro_f.nombre_periodo}' guardado correctamente.")

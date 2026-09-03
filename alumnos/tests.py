@@ -342,6 +342,7 @@ class CentroMandoValidacionTests(TestCase):
             f'faltas_alumno_{self.alumno_1.pk}': '1',
         })
         registro = RegistroInasistenciasPeriodo.objects.get()
+        self.periodo.refresh_from_db()
         self.assertEqual(registro.fecha_inicio, self.periodo.fecha_inicio)
         self.assertEqual(registro.fecha_fin, self.periodo.fecha_fin)
 

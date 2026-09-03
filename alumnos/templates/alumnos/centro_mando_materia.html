@@ -20,6 +20,7 @@
             </div>
         {% endfor %}
     {% endif %}
+    {% if periodo_reporte %}<p class="mb-4 text-sm text-indigo-700 font-semibold">Periodo de reporte activo: {{ periodo_reporte.nombre }} · límite {{ periodo_reporte.fecha_limite }}</p>{% else %}<p class="mb-4 text-sm text-rose-700 font-semibold">No hay periodo de reporte activo: no se pueden guardar capturas.</p>{% endif %}
 
     <!-- PESTAÑAS DE NAVEGACIÓN -->
     <div class="border-b border-slate-200 mb-8">

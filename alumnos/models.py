@@ -190,6 +190,22 @@ class CicloEscolar(models.Model):
         return self.nombre
 
 
+class PeriodoReporte(models.Model):
+    ciclo = models.ForeignKey(CicloEscolar, on_delete=models.PROTECT, related_name='periodos_reportes')
+    nombre = models.CharField(max_length=100)
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField()
+    fecha_limite = models.DateField()
+    activo = models.BooleanField(default=False)
+    cerrado = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-fecha_inicio']
+
+    def __str__(self):
+        return f"{self.nombre} ({self.ciclo})"
+
+
 class Materia(models.Model):
     nombre = models.CharField(max_length=100) # Ej: "Matemáticas I"
     catalogo = models.ForeignKey(
@@ -280,6 +296,7 @@ def formatear_rango_fechas(fecha_inicio, fecha_fin):
 # ==========================================
 
 class RegistroTareasPeriodo(models.Model):
+    periodo_reporte = models.ForeignKey(PeriodoReporte, on_delete=models.PROTECT, null=True, blank=True, related_name='reportes_actividades')
     materia = models.ForeignKey('Materia', on_delete=models.CASCADE, related_name='registros_tareas')
     grupo = models.ForeignKey('Grupo', on_delete=models.CASCADE, related_name='registros_tareas')
     nombre_periodo = models.CharField(max_length=150, blank=True, help_text="Se genera automáticamente según las fechas")
@@ -321,6 +338,7 @@ class DetalleTareaAlumno(models.Model):
 # ==========================================
 
 class RegistroInasistenciasPeriodo(models.Model):
+    periodo_reporte = models.ForeignKey(PeriodoReporte, on_delete=models.PROTECT, null=True, blank=True, related_name='reportes_asistencias')
     materia = models.ForeignKey('Materia', on_delete=models.CASCADE, related_name='registros_inasistencias')
     grupo = models.ForeignKey('Grupo', on_delete=models.CASCADE, related_name='registros_inasistencias')
     nombre_periodo = models.CharField(max_length=150, blank=True, help_text="Se genera automáticamente según las fechas")

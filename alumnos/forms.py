@@ -1,5 +1,5 @@
 from django import forms
-from .models import TareaEncargada, Materia, Grupo, Maestro, CatalogoMateria, CicloEscolar
+from .models import TareaEncargada, Materia, Grupo, Maestro, CatalogoMateria, CicloEscolar, PeriodoReporte
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 
@@ -183,6 +183,20 @@ class CicloEscolarForm(forms.ModelForm):
         if fin != inicio + 1:
             raise forms.ValidationError("El segundo año debe ser consecutivo al primero.")
         return nombre
+
+
+class PeriodoReporteForm(forms.ModelForm):
+    class Meta:
+        model = PeriodoReporte
+        fields = ['nombre', 'fecha_inicio', 'fecha_fin', 'fecha_limite']
+        widgets = {field: forms.DateInput(attrs={'class': INPUT_CLASS, 'type': 'date'}) for field in ['fecha_inicio', 'fecha_fin', 'fecha_limite']}
+        widgets['nombre'] = forms.TextInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej. Reporte septiembre'})
+
+    def clean(self):
+        data = super().clean()
+        if data.get('fecha_inicio') and data.get('fecha_fin') and data['fecha_inicio'] > data['fecha_fin']:
+            self.add_error('fecha_fin', 'La fecha final no puede ser anterior al inicio.')
+        return data
 
 
 class EditarMaestroForm(forms.ModelForm):

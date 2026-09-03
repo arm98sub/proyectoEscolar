@@ -1,6 +1,8 @@
 from django.contrib.auth.models import User
 from django.test import Client, TestCase
 from django.urls import reverse
+from django.utils import timezone
+from datetime import date, datetime
 
 from .models import (
     Alumno, Grupo, Maestro, Materia, CatalogoMateria, CicloEscolar, PeriodoReporte, TareaPendiente, RegistroTareasPeriodo,
@@ -299,6 +301,22 @@ class AdminDashboardCrudTests(TestCase):
         self.assertTrue(self.ciclo.cerrado)
         self.assertFalse(self.ciclo.activo)
         self.assertEqual(self.ciclo.asignaciones.count(), 2)
+
+    def test_tablero_atp_marca_reporte_completo_entregado_tarde(self):
+        periodo = PeriodoReporte.objects.create(
+            ciclo=self.ciclo, nombre='Quincena', fecha_inicio='2026-09-01',
+            fecha_fin='2026-09-15', fecha_limite='2026-09-16', activo=True,
+        )
+        registro = RegistroTareasPeriodo.objects.create(
+            materia=self.materia_1, grupo=self.grupo_1, periodo_reporte=periodo,
+            fecha_inicio=date(2026, 9, 1), fecha_fin=date(2026, 9, 15), total_tareas_encargadas=1,
+        )
+        RegistroTareasPeriodo.objects.filter(pk=registro.pk).update(
+            fecha_creacion=timezone.make_aware(datetime(2026, 9, 17, 12, 0))
+        )
+        response = self.client.get(reverse('tablero_reportes_atp'))
+        fila = next(f for f in response.context['filas'] if f['maestro'] == self.maestro_1)
+        self.assertEqual(fila['estado_actividades'], 'tarde')
 
 
 class CentroMandoValidacionTests(TestCase):

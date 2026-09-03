@@ -5,7 +5,7 @@
     <div class="mb-6 flex justify-between items-center flex-wrap gap-4">
         <div>
             <h1 class="text-2xl font-bold text-slate-800">Gestión de Materias y Asignación Docente</h1>
-            <p class="text-slate-600 text-sm">Panel de administración pedagógica (ATP / Dirección).</p>
+            <p class="text-slate-600 text-sm">Ciclo activo: <strong>{{ ciclo.nombre|default:'ninguno' }}</strong></p>
         </div>
         <div class="flex gap-2">
             <a href="{% url 'registrar_catalogo_materia' %}" class="px-4 py-2 bg-indigo-600 text-white font-medium text-xs rounded-xl">+ Materia al catálogo</a>

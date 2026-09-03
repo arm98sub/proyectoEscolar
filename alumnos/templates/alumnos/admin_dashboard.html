@@ -2,12 +2,13 @@
 {% block content %}
 <div class="max-w-6xl mx-auto py-8 px-4">
   <div class="flex items-center justify-between mb-6">
-    <div><h1 class="text-3xl font-bold">Panel administrativo</h1><p class="text-slate-500">Materias agrupadas por nombre</p></div>
+    <div><h1 class="text-3xl font-bold">Panel administrativo</h1><p class="text-slate-500">Materias del ciclo {{ ciclo.nombre|default:'sin ciclo activo' }}</p></div>
     <div class="space-x-2"><a href="{% url 'registrar_maestro' %}" class="px-4 py-2 bg-white border rounded-xl">Maestros</a><a href="{% url 'registrar_materia' %}" class="px-4 py-2 bg-indigo-600 text-white rounded-xl">Materias</a></div>
   </div>
+  <form method="get" class="mb-6"><label class="text-sm font-bold mr-2">Consultar ciclo:</label><select name="ciclo" onchange="this.form.submit()" class="px-3 py-2 border rounded-xl">{% for item in ciclos %}<option value="{{ item.id }}" {% if item.id == ciclo.id %}selected{% endif %}>{{ item.nombre }}{% if item.activo %} (activo){% endif %}</option>{% endfor %}</select></form>
   <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
     {% for item in materias_agrupadas %}
-      <a href="{% url 'admin_materia_grupos' item.identificador %}" class="block bg-white border rounded-2xl p-5 shadow-sm hover:border-indigo-400">
+      <a href="{% url 'admin_materia_grupos' item.identificador %}?ciclo={{ ciclo.id }}" class="block bg-white border rounded-2xl p-5 shadow-sm hover:border-indigo-400">
         <h2 class="text-lg font-bold text-slate-800">{{ item.nombre }}</h2>
         <p class="text-sm text-slate-500 mt-2">{{ item.total_grupos }} grupo{{ item.total_grupos|pluralize }} · {{ item.total_alumnos }} alumnos</p>
         <p class="text-sm font-semibold text-indigo-700 mt-4">Ver grupos →</p>

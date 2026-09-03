@@ -3,7 +3,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from .models import (
-    Alumno, Grupo, Maestro, Materia, CatalogoMateria, CicloEscolar, TareaPendiente, RegistroTareasPeriodo,
+    Alumno, Grupo, Maestro, Materia, CatalogoMateria, CicloEscolar, PeriodoReporte, TareaPendiente, RegistroTareasPeriodo,
     RegistroInasistenciasPeriodo,
 )
 
@@ -309,6 +309,14 @@ class CentroMandoValidacionTests(TestCase):
     def setUp(self):
         self.client.force_login(self.user_1)
         self.url = reverse('centro_mando_materia', args=[self.materia_1.pk])
+        self.periodo = PeriodoReporte.objects.create(
+            ciclo=self.ciclo,
+            nombre='Reporte de prueba',
+            fecha_inicio='2026-09-01',
+            fecha_fin='2026-09-15',
+            fecha_limite='2026-09-18',
+            activo=True,
+        )
 
     def test_tareas_rechaza_numeros_invalidos_sin_crear_registro(self):
         response = self.client.post(self.url, {
@@ -343,3 +351,14 @@ class CentroMandoValidacionTests(TestCase):
         })
         registro = RegistroTareasPeriodo.objects.get()
         self.assertEqual(registro.detalles_alumnos.get().tareas_no_entregadas, 2)
+        self.assertEqual(registro.periodo_reporte, self.periodo)
+
+    def test_rechaza_captura_si_no_hay_periodo_activo(self):
+        self.periodo.activo = False
+        self.periodo.save(update_fields=['activo'])
+        self.client.post(self.url, {
+            'tipo_formulario': 'guardar_tareas',
+            'fecha_inicio_tareas': '2026-09-01', 'fecha_fin_tareas': '2026-09-15',
+            'total_tareas_encargadas': '2', f'tareas_alumno_{self.alumno_1.pk}': '0',
+        })
+        self.assertFalse(RegistroTareasPeriodo.objects.exists())

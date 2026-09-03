@@ -335,13 +335,15 @@ class CentroMandoValidacionTests(TestCase):
         })
         self.assertFalse(RegistroTareasPeriodo.objects.exists())
 
-    def test_inasistencias_rechaza_fechas_invertidas(self):
+    def test_inasistencias_usa_fechas_del_periodo_activo(self):
         self.client.post(self.url, {
             'tipo_formulario': 'guardar_inasistencias',
             'fecha_inicio_faltas': '2026-06-15', 'fecha_fin_faltas': '2026-06-01',
             f'faltas_alumno_{self.alumno_1.pk}': '1',
         })
-        self.assertFalse(RegistroInasistenciasPeriodo.objects.exists())
+        registro = RegistroInasistenciasPeriodo.objects.get()
+        self.assertEqual(registro.fecha_inicio, self.periodo.fecha_inicio)
+        self.assertEqual(registro.fecha_fin, self.periodo.fecha_fin)
 
     def test_post_valido_crea_registros_atomicos(self):
         self.client.post(self.url, {

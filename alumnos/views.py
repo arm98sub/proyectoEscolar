@@ -7,10 +7,10 @@ from django.http import HttpResponseNotAllowed
 from django.http import Http404
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
-from .models import Maestro, Materia, Grupo, Alumno, CatalogoMateria, CicloEscolar, RegistroTareasPeriodo, DetalleTareaAlumno, RegistroInasistenciasPeriodo, DetalleInasistenciaAlumno
+from .models import Maestro, Materia, Grupo, Alumno, CatalogoMateria, CicloEscolar, PeriodoReporte, RegistroTareasPeriodo, DetalleTareaAlumno, RegistroInasistenciasPeriodo, DetalleInasistenciaAlumno
 from .forms import (
     TareaEncargadaForm, CrearMaestroForm, CrearMateriaForm, EditarMaestroForm,
-    EditarMateriaForm, CatalogoMateriaForm, CicloEscolarForm, RegistroTareasCentroForm, RegistroInasistenciasCentroForm,
+    EditarMateriaForm, CatalogoMateriaForm, CicloEscolarForm, PeriodoReporteForm, RegistroTareasCentroForm, RegistroInasistenciasCentroForm,
 )
 from django.contrib import messages  # <--- AGREGAR ESTA LÍNEA
 from .models import Grupo, Materia, Alumno, RegistroTareasPeriodo, DetalleTareaAlumno
@@ -258,6 +258,31 @@ def cerrar_ciclo(request, ciclo_id):
 
 
 @admin_required
+def gestionar_periodos_reportes(request):
+    ciclo = CicloEscolar.objects.filter(activo=True, cerrado=False).first()
+    form = PeriodoReporteForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid() and ciclo:
+        periodo = form.save(commit=False); periodo.ciclo = ciclo; periodo.activo = True
+        PeriodoReporte.objects.filter(ciclo=ciclo).update(activo=False)
+        periodo.save(); messages.success(request, 'Periodo de reporte activado.')
+        return redirect('gestionar_periodos_reportes')
+    return render(request, 'alumnos/gestionar_periodos_reportes.html', {'form': form, 'ciclo': ciclo, 'periodos': PeriodoReporte.objects.filter(ciclo=ciclo) if ciclo else []})
+
+
+@admin_required
+def tablero_reportes_atp(request):
+    periodo = PeriodoReporte.objects.filter(ciclo__activo=True, activo=True, cerrado=False).first()
+    filas = []
+    if periodo:
+        for maestro in Maestro.objects.filter(activo=True).prefetch_related('materias'):
+            asignaciones = maestro.materias.filter(ciclo=periodo.ciclo)
+            pendientes_actividades = [m for m in asignaciones if not RegistroTareasPeriodo.objects.filter(materia=m, periodo_reporte=periodo).exists()]
+            pendientes_asistencias = [m for m in asignaciones if not RegistroInasistenciasPeriodo.objects.filter(materia=m, periodo_reporte=periodo).exists()]
+            filas.append({'maestro': maestro, 'pendientes_actividades': pendientes_actividades, 'pendientes_asistencias': pendientes_asistencias, 'actividades_ok': not pendientes_actividades and asignaciones.exists(), 'asistencias_ok': not pendientes_asistencias and asignaciones.exists()})
+    return render(request, 'alumnos/tablero_reportes_atp.html', {'periodo': periodo, 'filas': filas})
+
+
+@admin_required
 def editar_materia(request, materia_id):
     materia = get_object_or_404(Materia, pk=materia_id)
     form = EditarMateriaForm(request.POST or None, instance=materia)
@@ -299,6 +324,7 @@ def centro_mando_materia(request, materia_id):
     materia = get_object_or_404(materias, pk=materia_id)
     grupo = materia.grupo
     alumnos = grupo.alumnos.all().order_by('apellido', 'nombre')
+    periodo_reporte = PeriodoReporte.objects.filter(ciclo=materia.ciclo, activo=True, cerrado=False).first()
 
     # Procesamiento de Formularios POST
     if request.method == 'POST':
@@ -309,9 +335,12 @@ def centro_mando_materia(request, materia_id):
 
         # --- A) REGISTRO DE TAREAS POR PERIODO ---
         if tipo_form == 'guardar_tareas':
+            if not periodo_reporte:
+                messages.error(request, 'No hay un periodo de reporte activo para este ciclo.')
+                return redirect('centro_mando_materia', materia_id=materia.id)
             datos = request.POST.copy()
-            datos['fecha_inicio'] = request.POST.get('fecha_inicio_tareas', '')
-            datos['fecha_fin'] = request.POST.get('fecha_fin_tareas', '')
+            datos['fecha_inicio'] = periodo_reporte.fecha_inicio.isoformat()
+            datos['fecha_fin'] = periodo_reporte.fecha_fin.isoformat()
             for alumno in alumnos:
                 datos[f'alumno_{alumno.pk}'] = request.POST.get(f'tareas_alumno_{alumno.pk}', '')
             form = RegistroTareasCentroForm(datos, alumnos=alumnos)
@@ -325,6 +354,7 @@ def centro_mando_materia(request, materia_id):
                 registro_t = RegistroTareasPeriodo.objects.create(
                     materia=materia,
                     grupo=grupo,
+                    periodo_reporte=periodo_reporte,
                     fecha_inicio=form.cleaned_data['fecha_inicio'],
                     fecha_fin=form.cleaned_data['fecha_fin'],
                     total_tareas_encargadas=form.cleaned_data['total_tareas_encargadas']
@@ -342,9 +372,12 @@ def centro_mando_materia(request, materia_id):
 
         # --- B) REGISTRO DE INASISTENCIAS POR PERIODO ---
         elif tipo_form == 'guardar_inasistencias':
+            if not periodo_reporte:
+                messages.error(request, 'No hay un periodo de reporte activo para este ciclo.')
+                return redirect('centro_mando_materia', materia_id=materia.id)
             datos = request.POST.copy()
-            datos['fecha_inicio'] = request.POST.get('fecha_inicio_faltas', '')
-            datos['fecha_fin'] = request.POST.get('fecha_fin_faltas', '')
+            datos['fecha_inicio'] = periodo_reporte.fecha_inicio.isoformat()
+            datos['fecha_fin'] = periodo_reporte.fecha_fin.isoformat()
             for alumno in alumnos:
                 datos[f'alumno_{alumno.pk}'] = request.POST.get(f'faltas_alumno_{alumno.pk}', '')
             form = RegistroInasistenciasCentroForm(datos, alumnos=alumnos)
@@ -358,6 +391,7 @@ def centro_mando_materia(request, materia_id):
                 registro_f = RegistroInasistenciasPeriodo.objects.create(
                     materia=materia,
                     grupo=grupo,
+                    periodo_reporte=periodo_reporte,
                     fecha_inicio=form.cleaned_data['fecha_inicio'],
                     fecha_fin=form.cleaned_data['fecha_fin']
                 )
@@ -391,6 +425,7 @@ def centro_mando_materia(request, materia_id):
         'alumnos_resumen': alumnos_resumen,
         'periodos_tareas': periodos_tareas,
         'periodos_inasistencias': periodos_inasistencias,
+        'periodo_reporte': periodo_reporte,
     }
     return render(request, 'alumnos/centro_mando_materia.html', context)
 

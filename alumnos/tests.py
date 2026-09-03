@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
-from datetime import datetime
+from datetime import date, datetime
 
 from .models import (
     Alumno, Grupo, Maestro, Materia, CatalogoMateria, CicloEscolar, PeriodoReporte, TareaPendiente, RegistroTareasPeriodo,
@@ -309,7 +309,7 @@ class AdminDashboardCrudTests(TestCase):
         )
         registro = RegistroTareasPeriodo.objects.create(
             materia=self.materia_1, grupo=self.grupo_1, periodo_reporte=periodo,
-            fecha_inicio='2026-09-01', fecha_fin='2026-09-15', total_tareas_encargadas=1,
+            fecha_inicio=date(2026, 9, 1), fecha_fin=date(2026, 9, 15), total_tareas_encargadas=1,
         )
         RegistroTareasPeriodo.objects.filter(pk=registro.pk).update(
             fecha_creacion=timezone.make_aware(datetime(2026, 9, 17, 12, 0))

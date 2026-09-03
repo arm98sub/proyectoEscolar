@@ -276,9 +276,15 @@ def tablero_reportes_atp(request):
     if periodo:
         for maestro in Maestro.objects.filter(activo=True).prefetch_related('materias'):
             asignaciones = maestro.materias.filter(ciclo=periodo.ciclo)
-            pendientes_actividades = [m for m in asignaciones if not RegistroTareasPeriodo.objects.filter(materia=m, periodo_reporte=periodo).exists()]
-            pendientes_asistencias = [m for m in asignaciones if not RegistroInasistenciasPeriodo.objects.filter(materia=m, periodo_reporte=periodo).exists()]
-            filas.append({'maestro': maestro, 'pendientes_actividades': pendientes_actividades, 'pendientes_asistencias': pendientes_asistencias, 'actividades_ok': not pendientes_actividades and asignaciones.exists(), 'asistencias_ok': not pendientes_asistencias and asignaciones.exists()})
+            actividades = RegistroTareasPeriodo.objects.filter(materia__in=asignaciones, periodo_reporte=periodo)
+            asistencias = RegistroInasistenciasPeriodo.objects.filter(materia__in=asignaciones, periodo_reporte=periodo)
+            pendientes_actividades = [m for m in asignaciones if not actividades.filter(materia=m).exists()]
+            pendientes_asistencias = [m for m in asignaciones if not asistencias.filter(materia=m).exists()]
+            def estado(registros, pendientes):
+                if pendientes or not asignaciones.exists():
+                    return 'incompleto'
+                return 'tarde' if any(r.fecha_creacion.date() > periodo.fecha_limite for r in registros) else 'completado'
+            filas.append({'maestro': maestro, 'pendientes_actividades': pendientes_actividades, 'pendientes_asistencias': pendientes_asistencias, 'estado_actividades': estado(actividades, pendientes_actividades), 'estado_asistencias': estado(asistencias, pendientes_asistencias)})
     return render(request, 'alumnos/tablero_reportes_atp.html', {'periodo': periodo, 'filas': filas})
 
 

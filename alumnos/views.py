@@ -819,12 +819,24 @@ def tablero_tutor(request):
                 'materia_nombre': materia.nombre,
                 'semaforo': semaforo_info,
                 'porcentaje_cumplimiento': porcentaje,
+                'maestro_nombre': str(materia.maestro),
+                'grupo_label': str(materia.grupo),
             })
+
+    total_materias = len(tablero_materias)
+    promedio_cumplimiento = round(
+        sum(item['porcentaje_cumplimiento'] for item in tablero_materias) / total_materias,
+        1,
+    ) if total_materias else 0
+    materias_atencion = sum(item['semaforo']['color'] != 'verde' for item in tablero_materias)
 
     context = {
         'alumno': alumno,
         'tablero_materias': tablero_materias,
         'hijos': hijos,
+        'total_materias': total_materias,
+        'promedio_cumplimiento': promedio_cumplimiento,
+        'materias_atencion': materias_atencion,
     }
     return render(request, 'alumnos/tablero_tutor.html', context)
 

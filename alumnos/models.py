@@ -175,10 +175,32 @@ class CatalogoMateria(models.Model):
         return self.nombre
 
 
+class CicloEscolar(models.Model):
+    nombre = models.CharField(max_length=20, unique=True)
+    activo = models.BooleanField(default=False)
+    cerrado = models.BooleanField(default=False)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-nombre']
+        verbose_name = "Ciclo escolar"
+        verbose_name_plural = "Ciclos escolares"
+
+    def __str__(self):
+        return self.nombre
+
+
 class Materia(models.Model):
     nombre = models.CharField(max_length=100) # Ej: "Matemáticas I"
     catalogo = models.ForeignKey(
         CatalogoMateria,
+        on_delete=models.PROTECT,
+        related_name='asignaciones',
+        null=True,
+        blank=True,
+    )
+    ciclo = models.ForeignKey(
+        CicloEscolar,
         on_delete=models.PROTECT,
         related_name='asignaciones',
         null=True,

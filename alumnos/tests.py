@@ -3,7 +3,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from .models import (
-    Alumno, Grupo, Maestro, Materia, CatalogoMateria, TareaPendiente, RegistroTareasPeriodo,
+    Alumno, Grupo, Maestro, Materia, CatalogoMateria, CicloEscolar, TareaPendiente, RegistroTareasPeriodo,
     RegistroInasistenciasPeriodo,
 )
 
@@ -30,13 +30,16 @@ class ControlAccesoTests(TestCase):
         cls.grupo_2 = Grupo.objects.create(grado=2, seccion='B', maestro=cls.user_2)
         cls.catalogo_matematicas = CatalogoMateria.objects.create(nombre='Matemáticas')
         cls.catalogo_historia = CatalogoMateria.objects.create(nombre='Historia')
+        cls.ciclo, _ = CicloEscolar.objects.get_or_create(nombre='2026-2027')
+        cls.ciclo.activo = True
+        cls.ciclo.save(update_fields=['activo'])
         cls.materia_1 = Materia.objects.create(
             nombre='Matemáticas', catalogo=cls.catalogo_matematicas,
-            maestro=cls.maestro_1, grupo=cls.grupo_1
+            maestro=cls.maestro_1, grupo=cls.grupo_1, ciclo=cls.ciclo
         )
         cls.materia_2 = Materia.objects.create(
             nombre='Historia', catalogo=cls.catalogo_historia,
-            maestro=cls.maestro_2, grupo=cls.grupo_2
+            maestro=cls.maestro_2, grupo=cls.grupo_2, ciclo=cls.ciclo
         )
         cls.alumno_1 = Alumno.objects.create(
             nombre='Ana', apellido='Uno', grupo=cls.grupo_1
@@ -174,7 +177,7 @@ class AdminDashboardCrudTests(TestCase):
         self.client.force_login(self.admin)
 
     def test_dashboard_agrupa_materias_y_las_ordena(self):
-        Materia.objects.create(nombre='Matemáticas', catalogo=self.catalogo_matematicas, maestro=self.maestro_2, grupo=self.grupo_2)
+        Materia.objects.create(nombre='Matemáticas', catalogo=self.catalogo_matematicas, maestro=self.maestro_2, grupo=self.grupo_2, ciclo=self.ciclo)
         response = self.client.get(reverse('admin_dashboard'))
         self.assertEqual(response.status_code, 200)
         agrupadas = response.context['materias_agrupadas']
@@ -183,7 +186,7 @@ class AdminDashboardCrudTests(TestCase):
         self.assertEqual(matematicas['total_grupos'], 2)
 
     def test_grupos_de_materia_estan_ordenados_y_enlazan_centro_mando(self):
-        Materia.objects.create(nombre='Matemáticas', catalogo=self.catalogo_matematicas, maestro=self.maestro_2, grupo=self.grupo_2)
+        Materia.objects.create(nombre='Matemáticas', catalogo=self.catalogo_matematicas, maestro=self.maestro_2, grupo=self.grupo_2, ciclo=self.ciclo)
         response = self.client.get(reverse('admin_materia_grupos', args=['matematicas']))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context['materias'].values_list('grupo__grado', flat=True)), [1, 2])
@@ -229,7 +232,7 @@ class AdminDashboardCrudTests(TestCase):
         self.assertFalse(User.objects.filter(pk=user.pk).exists())
 
     def test_editar_materia_modifica_solo_una_instancia(self):
-        otra = Materia.objects.create(nombre='Matemáticas', catalogo=self.catalogo_matematicas, maestro=self.maestro_2, grupo=self.grupo_2)
+        otra = Materia.objects.create(nombre='Matemáticas', catalogo=self.catalogo_matematicas, maestro=self.maestro_2, grupo=self.grupo_2, ciclo=self.ciclo)
         response = self.client.post(reverse('editar_materia', args=[self.materia_1.pk]), {
             'catalogo': self.catalogo_historia.pk, 'maestro': self.maestro_1.pk,
             'grupo': self.grupo_1.pk,
@@ -278,6 +281,24 @@ class AdminDashboardCrudTests(TestCase):
         self.assertFalse(self.maestro_1.activo)
         self.assertFalse(self.user_1.is_active)
         self.assertTrue(Materia.objects.filter(pk=self.materia_1.pk).exists())
+
+    def test_crear_ciclo_puede_copiar_asignaciones_y_activarlo(self):
+        response = self.client.post(reverse('gestionar_ciclos'), {
+            'nombre': '2027-2028', 'copiar_asignaciones': self.ciclo.pk, 'activar': 'on',
+        })
+        self.assertRedirects(response, reverse('gestionar_ciclos'))
+        nuevo = CicloEscolar.objects.get(nombre='2027-2028')
+        self.ciclo.refresh_from_db()
+        self.assertTrue(nuevo.activo)
+        self.assertFalse(self.ciclo.activo)
+        self.assertEqual(nuevo.asignaciones.count(), self.ciclo.asignaciones.count())
+
+    def test_cerrar_ciclo_conserva_sus_asignaciones(self):
+        self.client.post(reverse('cerrar_ciclo', args=[self.ciclo.pk]))
+        self.ciclo.refresh_from_db()
+        self.assertTrue(self.ciclo.cerrado)
+        self.assertFalse(self.ciclo.activo)
+        self.assertEqual(self.ciclo.asignaciones.count(), 2)
 
 
 class CentroMandoValidacionTests(TestCase):

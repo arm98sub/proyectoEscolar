@@ -1,5 +1,5 @@
 from django import forms
-from .models import TareaEncargada, Materia, Grupo, Maestro, CatalogoMateria
+from .models import TareaEncargada, Materia, Grupo, Maestro, CatalogoMateria, CicloEscolar
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 
@@ -36,10 +36,10 @@ class TareaEncargadaForm(forms.Form):
         if user:
             if user.is_superuser or user.is_staff:
                 self.fields['grupos'].queryset = Grupo.objects.all()
-                self.fields['materia'].queryset = Materia.objects.all()
+                self.fields['materia'].queryset = Materia.objects.filter(ciclo__activo=True)
             else:
                 self.fields['grupos'].queryset = Grupo.objects.filter(maestro=user)
-                self.fields['materia'].queryset = Materia.objects.filter(maestro__user=user)
+                self.fields['materia'].queryset = Materia.objects.filter(maestro__user=user, ciclo__activo=True)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -118,6 +118,7 @@ class CrearMateriaForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.ciclo = kwargs.pop('ciclo', None)
         super().__init__(*args, **kwargs)
         self.fields['catalogo'].queryset = CatalogoMateria.objects.filter(activa=True).order_by('nombre')
         self.fields['maestro'].queryset = Maestro.objects.filter(activo=True).order_by('nombre', 'apellido_paterno')
@@ -132,6 +133,7 @@ class CrearMateriaForm(forms.ModelForm):
             conflictos = Materia.objects.filter(
                 grupo__in=grupos,
                 catalogo=catalogo,
+                ciclo=self.ciclo,
             ).exclude(maestro=maestro)
             if conflictos.exists() and not cleaned_data.get('confirmar_reasignaciones'):
                 self.add_error(
@@ -151,6 +153,35 @@ class CatalogoMateriaForm(forms.ModelForm):
         nombre = self.cleaned_data['nombre'].strip()
         if CatalogoMateria.objects.filter(nombre__iexact=nombre).exists():
             raise forms.ValidationError("Esta materia ya existe en el catálogo.")
+        return nombre
+
+
+class CicloEscolarForm(forms.ModelForm):
+    copiar_asignaciones = forms.ModelChoiceField(
+        queryset=CicloEscolar.objects.none(),
+        required=False,
+        label="Copiar asignaciones de",
+        help_text="Opcional: crea las mismas materias, grupos y docentes del ciclo seleccionado.",
+    )
+    activar = forms.BooleanField(required=False, initial=True, label="Activar este ciclo al crearlo")
+
+    class Meta:
+        model = CicloEscolar
+        fields = ['nombre']
+        widgets = {'nombre': forms.TextInput(attrs={'class': INPUT_CLASS, 'placeholder': 'Ej. 2027-2028'})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['copiar_asignaciones'].queryset = CicloEscolar.objects.order_by('-nombre')
+        self.fields['copiar_asignaciones'].widget.attrs['class'] = INPUT_CLASS
+
+    def clean_nombre(self):
+        nombre = self.cleaned_data['nombre'].strip()
+        if not __import__('re').fullmatch(r'\d{4}-\d{4}', nombre):
+            raise forms.ValidationError("Usa el formato AAAA-AAAA, por ejemplo 2026-2027.")
+        inicio, fin = map(int, nombre.split('-'))
+        if fin != inicio + 1:
+            raise forms.ValidationError("El segundo año debe ser consecutivo al primero.")
         return nombre
 
 

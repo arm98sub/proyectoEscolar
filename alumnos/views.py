@@ -7,10 +7,10 @@ from django.http import HttpResponseNotAllowed
 from django.http import Http404
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
-from .models import Maestro, Materia, Grupo, Alumno, CatalogoMateria, RegistroTareasPeriodo, DetalleTareaAlumno, RegistroInasistenciasPeriodo, DetalleInasistenciaAlumno
+from .models import Maestro, Materia, Grupo, Alumno, CatalogoMateria, CicloEscolar, RegistroTareasPeriodo, DetalleTareaAlumno, RegistroInasistenciasPeriodo, DetalleInasistenciaAlumno
 from .forms import (
     TareaEncargadaForm, CrearMaestroForm, CrearMateriaForm, EditarMaestroForm,
-    EditarMateriaForm, CatalogoMateriaForm, RegistroTareasCentroForm, RegistroInasistenciasCentroForm,
+    EditarMateriaForm, CatalogoMateriaForm, CicloEscolarForm, RegistroTareasCentroForm, RegistroInasistenciasCentroForm,
 )
 from django.contrib import messages  # <--- AGREGAR ESTA LÍNEA
 from .models import Grupo, Materia, Alumno, RegistroTareasPeriodo, DetalleTareaAlumno
@@ -19,7 +19,10 @@ from .authz import admin_required, docente_o_admin_required, es_administrador, m
 
 @admin_required
 def admin_dashboard(request):
-    nombres = Materia.objects.order_by('nombre').values_list('nombre', flat=True).distinct()
+    ciclos = CicloEscolar.objects.all()
+    ciclo = get_object_or_404(ciclos, pk=request.GET['ciclo']) if request.GET.get('ciclo') else ciclos.filter(activo=True).first()
+    base = Materia.objects.filter(ciclo=ciclo) if ciclo else Materia.objects.none()
+    nombres = base.order_by('nombre').values_list('nombre', flat=True).distinct()
     agrupadas = []
     vistos = set()
     for nombre in sorted(nombres, key=str.casefold):
@@ -27,32 +30,37 @@ def admin_dashboard(request):
         if clave in vistos:
             continue
         vistos.add(clave)
-        instancias = Materia.objects.filter(nombre__iexact=nombre)
+        instancias = base.filter(nombre__iexact=nombre)
         agrupadas.append({
             'nombre': nombre,
             'identificador': slugify(nombre),
             'total_grupos': instancias.count(),
             'total_alumnos': Alumno.objects.filter(grupo__materias__in=instancias).distinct().count(),
         })
-    return render(request, 'alumnos/admin_dashboard.html', {'materias_agrupadas': agrupadas})
+    return render(request, 'alumnos/admin_dashboard.html', {'materias_agrupadas': agrupadas, 'ciclo': ciclo, 'ciclos': ciclos})
 
 
-def _materias_por_identificador(identificador):
-    nombres = Materia.objects.values_list('nombre', flat=True).distinct()
+def _materias_por_identificador(identificador, ciclo):
+    base = Materia.objects.filter(ciclo=ciclo)
+    nombres = base.values_list('nombre', flat=True).distinct()
     coincidencias = [nombre for nombre in nombres if slugify(nombre) == identificador]
     if len(coincidencias) != 1:
         raise Http404("Materia no encontrada")
-    return coincidencias[0], Materia.objects.filter(nombre=coincidencias[0]).select_related(
+    return coincidencias[0], base.filter(nombre=coincidencias[0]).select_related(
         'grupo', 'maestro'
     ).order_by('grupo__grado', 'grupo__seccion')
 
 
 @admin_required
 def admin_materia_grupos(request, identificador):
-    nombre, materias = _materias_por_identificador(identificador)
+    ciclos = CicloEscolar.objects.all()
+    ciclo = get_object_or_404(ciclos, pk=request.GET['ciclo']) if request.GET.get('ciclo') else ciclos.filter(activo=True).first()
+    if not ciclo:
+        raise Http404("No hay ciclo escolar")
+    nombre, materias = _materias_por_identificador(identificador, ciclo)
     return render(request, 'alumnos/admin_materia_grupos.html', {
         'nombre_materia': nombre,
-        'materias': materias,
+        'materias': materias, 'ciclo': ciclo,
     })
 
 @admin_required
@@ -150,9 +158,13 @@ def registrar_materia(request):
     """
     Vista exclusiva para administradores/ATP: dar de alta materias en masa para múltiples grupos.
     """
+    ciclo = CicloEscolar.objects.filter(activo=True, cerrado=False).first()
     if request.method == 'POST':
-        form = CrearMateriaForm(request.POST)
+        form = CrearMateriaForm(request.POST, ciclo=ciclo)
         if form.is_valid():
+            if not ciclo:
+                messages.error(request, "Debes crear y activar un ciclo escolar antes de asignar materias.")
+                return redirect('gestionar_ciclos')
             catalogo = form.cleaned_data['catalogo']
             nombre = catalogo.nombre
             maestro = form.cleaned_data['maestro']
@@ -163,6 +175,7 @@ def registrar_materia(request):
                 obj, created = Materia.objects.get_or_create(
                     catalogo=catalogo,
                     grupo=grupo,
+                    ciclo=ciclo,
                     defaults={'nombre': nombre, 'maestro': maestro}
                 )
                 if not created and (obj.maestro != maestro or obj.nombre != nombre):
@@ -175,15 +188,15 @@ def registrar_materia(request):
             messages.success(request, f"Materia '{nombre}' guardada y asignada a {creadas} grupo(s) para el docente {docente_nom}.")
             return redirect('registrar_materia')
     else:
-        form = CrearMateriaForm()
+        form = CrearMateriaForm(ciclo=ciclo)
 
     # Ordenamos por grado y seccion del grupo
-    materias_qs = Materia.objects.select_related('grupo', 'maestro').all().order_by('grupo__grado', 'grupo__seccion', 'nombre')
+    materias_qs = Materia.objects.select_related('grupo', 'maestro').filter(ciclo=ciclo).order_by('grupo__grado', 'grupo__seccion', 'nombre')
     materias = list(materias_qs)
 
     context = {
         'form': form,
-        'materias': materias,
+        'materias': materias, 'ciclo': ciclo,
     }
     return render(request, 'alumnos/registrar_materia.html', context)
 
@@ -198,6 +211,50 @@ def registrar_catalogo_materia(request):
     return render(request, 'alumnos/admin_form.html', {
         'form': form, 'titulo': 'Agregar materia al catálogo', 'volver': 'registrar_materia'
     })
+
+
+@admin_required
+def gestionar_ciclos(request):
+    form = CicloEscolarForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        with transaction.atomic():
+            ciclo = form.save(commit=False)
+            ciclo.activo = form.cleaned_data['activar']
+            if ciclo.activo:
+                CicloEscolar.objects.update(activo=False)
+            ciclo.save()
+            origen = form.cleaned_data.get('copiar_asignaciones')
+            if origen:
+                Materia.objects.bulk_create([
+                    Materia(nombre=m.nombre, catalogo=m.catalogo, maestro=m.maestro, grupo=m.grupo, ciclo=ciclo)
+                    for m in origen.asignaciones.select_related('catalogo', 'maestro', 'grupo')
+                ])
+        messages.success(request, f"Ciclo {ciclo.nombre} creado correctamente.")
+        return redirect('gestionar_ciclos')
+    return render(request, 'alumnos/gestionar_ciclos.html', {'form': form, 'ciclos': CicloEscolar.objects.all()})
+
+
+@require_POST
+@admin_required
+def activar_ciclo(request, ciclo_id):
+    ciclo = get_object_or_404(CicloEscolar, pk=ciclo_id, cerrado=False)
+    with transaction.atomic():
+        CicloEscolar.objects.update(activo=False)
+        ciclo.activo = True
+        ciclo.save(update_fields=['activo'])
+    messages.success(request, f"El ciclo {ciclo.nombre} ahora está activo.")
+    return redirect('gestionar_ciclos')
+
+
+@require_POST
+@admin_required
+def cerrar_ciclo(request, ciclo_id):
+    ciclo = get_object_or_404(CicloEscolar, pk=ciclo_id)
+    ciclo.activo = False
+    ciclo.cerrado = True
+    ciclo.save(update_fields=['activo', 'cerrado'])
+    messages.success(request, f"El ciclo {ciclo.nombre} fue cerrado y permanece disponible para consulta.")
+    return redirect('gestionar_ciclos')
 
 
 @admin_required
@@ -245,6 +302,9 @@ def centro_mando_materia(request, materia_id):
 
     # Procesamiento de Formularios POST
     if request.method == 'POST':
+        if materia.ciclo and materia.ciclo.cerrado:
+            messages.error(request, "Este ciclo está cerrado y solo puede consultarse.")
+            return redirect('centro_mando_materia', materia_id=materia.id)
         tipo_form = request.POST.get('tipo_formulario')
 
         # --- A) REGISTRO DE TAREAS POR PERIODO ---
@@ -356,7 +416,7 @@ def login_view(request):
 # 2. Vista del Dashboard Protegida
 @docente_o_admin_required
 def dashboard_maestro(request):
-    materias = Materia.objects.select_related('grupo', 'maestro__user')
+    materias = Materia.objects.select_related('grupo', 'maestro__user').filter(ciclo__activo=True)
     if not es_administrador(request.user):
         materias = materias.filter(maestro__user=request.user)
 
@@ -403,7 +463,7 @@ def detalle_alumno(request, alumno_id):
         mis_tareas = mis_tareas.filter(materia_id=materia_id)
         materia_seleccionada = int(materia_id)
     
-    materias = Materia.objects.filter(grupo=alumno.grupo)
+    materias = Materia.objects.filter(grupo=alumno.grupo, ciclo__activo=True)
     if not es_administrador(request.user):
         materias = materias.filter(maestro__user=request.user)
     
@@ -692,19 +752,20 @@ def tablero_tutor(request):
 
     if alumno.grupo:
         # 1. Buscar materias directamente vinculadas al grupo del alumno
-        materias = list(Materia.objects.filter(grupo=alumno.grupo))
+        materias = list(Materia.objects.filter(grupo=alumno.grupo, ciclo__activo=True))
         
         # 2. Si no encuentra por ID de grupo, buscar por grado y sección (por si hay grupos duplicados)
         if not materias:
             materias = list(Materia.objects.filter(
                 grupo__grado=alumno.grupo.grado, 
-                grupo__seccion=alumno.grupo.seccion
+                grupo__seccion=alumno.grupo.seccion,
+                ciclo__activo=True,
             ))
 
         # 3. Si aún no encuentra, buscar las materias de las tareas que deba el alumno
         if not materias:
             materias_ids = alumno.detalles_tareas.values_list('materia_id', flat=True).distinct()
-            materias = list(Materia.objects.filter(id__in=materias_ids))
+            materias = list(Materia.objects.filter(id__in=materias_ids, ciclo__activo=True))
 
         # Construir información de las tarjetas
         for materia in materias:

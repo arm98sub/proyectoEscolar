@@ -473,10 +473,18 @@ def dashboard_maestro(request):
             'verdes': colores.count('verde'),
         })
 
+    resumen = {
+        'materias': len(materias_data),
+        'alumnos': sum(item['total_alumnos'] for item in materias_data),
+        'atencion': sum(item['amarillos'] + item['rojos'] for item in materias_data),
+        'riesgo': sum(item['rojos'] for item in materias_data),
+    }
+    periodo_reporte = PeriodoReporte.objects.filter(ciclo__activo=True, activo=True, cerrado=False).first()
+
     return render(
         request,
         'alumnos/dashboard.html',
-        {'materias_data': materias_data},
+        {'materias_data': materias_data, 'resumen': resumen, 'periodo_reporte': periodo_reporte},
     )
 
 # 3. Vista rápida para salir

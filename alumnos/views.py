@@ -7,10 +7,10 @@ from django.http import HttpResponseNotAllowed
 from django.http import Http404
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
-from .models import Maestro, Materia, Grupo, Alumno, CatalogoMateria, CicloEscolar, PeriodoReporte, RegistroTareasPeriodo, DetalleTareaAlumno, RegistroInasistenciasPeriodo, DetalleInasistenciaAlumno
+from .models import Maestro, Materia, Grupo, Alumno, Tutor, CatalogoMateria, CicloEscolar, PeriodoReporte, RegistroTareasPeriodo, DetalleTareaAlumno, RegistroInasistenciasPeriodo, DetalleInasistenciaAlumno
 from .forms import (
     TareaEncargadaForm, CrearMaestroForm, CrearMateriaForm, EditarMaestroForm,
-    EditarMateriaForm, CatalogoMateriaForm, CicloEscolarForm, PeriodoReporteForm, RegistroTareasCentroForm, RegistroInasistenciasCentroForm,
+    EditarMateriaForm, CatalogoMateriaForm, CicloEscolarForm, PeriodoReporteForm, RegistroTareasCentroForm, RegistroInasistenciasCentroForm, CrearTutorForm, EditarTutorForm,
 )
 from django.contrib import messages  # <--- AGREGAR ESTA LÍNEA
 from .models import Grupo, Materia, Alumno, RegistroTareasPeriodo, DetalleTareaAlumno
@@ -150,6 +150,81 @@ def eliminar_maestro(request, maestro_id):
         'tipo': 'maestro',
         'volver': 'registrar_maestro',
         'advertencia': 'Solo se puede eliminar definitivamente si no tiene materias asignadas. Si tiene historial, utiliza Desactivar.',
+    })
+
+
+@admin_required
+def registrar_tutor(request):
+    form = CrearTutorForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        with transaction.atomic():
+            user = User.objects.create_user(
+                username=form.cleaned_data['username'],
+                password=form.cleaned_data['password'],
+                first_name=form.cleaned_data['nombre'],
+                last_name=form.cleaned_data['apellido'],
+                email=form.cleaned_data['correo'],
+            )
+            tutor = form.save(commit=False)
+            tutor.user = user
+            tutor.save()
+            form.save_m2m()
+        messages.success(request, f"Tutor '{tutor}' registrado con acceso al Portal de familias.")
+        return redirect('registrar_tutor')
+    tutores = Tutor.objects.select_related('user').prefetch_related('hijos__grupo').order_by('apellido', 'nombre')
+    return render(request, 'alumnos/registrar_tutor.html', {'form': form, 'tutores': tutores})
+
+
+@admin_required
+def editar_tutor(request, tutor_id):
+    tutor = get_object_or_404(Tutor.objects.select_related('user'), pk=tutor_id)
+    if not tutor.user_id:
+        messages.error(request, 'Este tutor no tiene cuenta de acceso. Regístralo nuevamente desde esta pantalla.')
+        return redirect('registrar_tutor')
+    form = EditarTutorForm(request.POST or None, instance=tutor)
+    if request.method == 'POST' and form.is_valid():
+        with transaction.atomic():
+            tutor = form.save(commit=False)
+            user = tutor.user
+            user.username = form.cleaned_data['username']
+            user.first_name = tutor.nombre
+            user.last_name = tutor.apellido
+            user.email = tutor.correo
+            if form.cleaned_data.get('password'):
+                user.set_password(form.cleaned_data['password'])
+            user.save()
+            tutor.save()
+            form.save_m2m()
+        messages.success(request, 'Los datos del tutor se actualizaron correctamente.')
+        return redirect('registrar_tutor')
+    return render(request, 'alumnos/admin_form.html', {'form': form, 'titulo': 'Editar tutor', 'volver': 'registrar_tutor'})
+
+
+@require_POST
+@admin_required
+def cambiar_estado_tutor(request, tutor_id):
+    tutor = get_object_or_404(Tutor.objects.select_related('user'), pk=tutor_id, user__isnull=False)
+    tutor.user.is_active = not tutor.user.is_active
+    tutor.user.save(update_fields=['is_active'])
+    messages.success(request, f"Tutor {'activado' if tutor.user.is_active else 'desactivado'} correctamente.")
+    return redirect('registrar_tutor')
+
+
+@admin_required
+def eliminar_tutor(request, tutor_id):
+    tutor = get_object_or_404(Tutor.objects.select_related('user'), pk=tutor_id)
+    if request.method == 'POST':
+        nombre = str(tutor)
+        with transaction.atomic():
+            if tutor.user_id:
+                tutor.user.delete()
+            else:
+                tutor.delete()
+        messages.success(request, f"El tutor '{nombre}' fue eliminado.")
+        return redirect('registrar_tutor')
+    return render(request, 'alumnos/admin_confirmar_eliminar.html', {
+        'objeto': tutor, 'tipo': 'tutor', 'volver': 'registrar_tutor',
+        'advertencia': 'Esta acción elimina la cuenta de acceso del tutor, pero no elimina a los alumnos.',
     })
 
 

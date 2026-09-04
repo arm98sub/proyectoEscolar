@@ -5,7 +5,7 @@ from django.utils import timezone
 from datetime import date, datetime
 
 from .models import (
-    Alumno, Grupo, Maestro, Materia, CatalogoMateria, CicloEscolar, PeriodoReporte, TareaPendiente, RegistroTareasPeriodo,
+    Alumno, Grupo, Maestro, Materia, Tutor, CatalogoMateria, CicloEscolar, PeriodoReporte, TareaPendiente, RegistroTareasPeriodo,
     RegistroInasistenciasPeriodo,
 )
 
@@ -317,6 +317,57 @@ class AdminDashboardCrudTests(TestCase):
         response = self.client.get(reverse('tablero_reportes_atp'))
         fila = next(f for f in response.context['filas'] if f['maestro'] == self.maestro_1)
         self.assertEqual(fila['estado_actividades'], 'tarde')
+
+
+class PortalTutoresTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        ControlAccesoTests.setUpTestData.__func__(cls)
+        cls.usuario_tutor = User.objects.create_user('familia-ana', password='ClaveSegura!2026')
+        cls.tutor = Tutor.objects.create(
+            user=cls.usuario_tutor,
+            nombre='María',
+            apellido='Pérez',
+            correo='maria@example.com',
+            telefono='4920000000',
+        )
+        cls.tutor.hijos.add(cls.alumno_1)
+
+    def test_tutor_solo_consulta_sus_alumnos(self):
+        self.client.force_login(self.usuario_tutor)
+        response = self.client.get(reverse('tablero_tutor'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['alumno'], self.alumno_1)
+        self.assertEqual(self.client.get(reverse('tablero_tutor') + f'?alumno={self.alumno_2.pk}').status_code, 404)
+
+    def test_tutor_puede_cambiar_entre_varios_hijos(self):
+        self.tutor.hijos.add(self.alumno_2)
+        self.client.force_login(self.usuario_tutor)
+        response = self.client.get(reverse('tablero_tutor') + f'?alumno={self.alumno_2.pk}')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['alumno'], self.alumno_2)
+        self.assertContains(response, self.alumno_1.nombre)
+        self.assertContains(response, self.alumno_2.nombre)
+
+    def test_administrador_crea_tutor_con_cuenta_y_varios_alumnos(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse('registrar_tutor'), {
+            'username': 'familia-nueva',
+            'password': 'ClaveSegura!2026',
+            'nombre': 'Claudia',
+            'apellido': 'Ramírez',
+            'correo': 'claudia@example.com',
+            'telefono': '4921111111',
+            'hijos': [self.alumno_1.pk, self.alumno_2.pk],
+        })
+        self.assertRedirects(response, reverse('registrar_tutor'))
+        tutor = Tutor.objects.get(correo='claudia@example.com')
+        self.assertTrue(tutor.user.check_password('ClaveSegura!2026'))
+        self.assertEqual(set(tutor.hijos.values_list('pk', flat=True)), {self.alumno_1.pk, self.alumno_2.pk})
+
+    def test_gestion_tutores_exige_administrador(self):
+        self.client.force_login(self.user_1)
+        self.assertEqual(self.client.get(reverse('registrar_tutor')).status_code, 403)
 
 
 class CentroMandoValidacionTests(TestCase):

@@ -1,14 +1,20 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portal de Tutores - Consulta Escolar</title>
+    <title>Portal de familias - Colegio del Centro</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
 
-   <form method="POST" class="space-y-5">
+   <form method="POST" class="w-full max-w-md space-y-5 bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
+    <div class="text-center">
+        <img src="{% static 'alumnos/img/colegio-del-centro-logo.png' %}" alt="Colegio del Centro" class="h-16 w-auto mx-auto mb-4">
+        <h1 class="text-xl font-bold text-[#002147]">Portal de familias</h1>
+        <p class="text-sm text-slate-500 mt-1">Consulta el progreso académico de tu hijo.</p>
+    </div>
     {% csrf_token %}
     <div>
         <label class="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
@@ -24,11 +30,10 @@
                class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none text-sm bg-gray-50">
     </div>
 
-    <button type="submit" class="w-full bg-[#1B365D] hover:bg-blue-900 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition-all cursor-pointer">
+    <button type="submit" class="w-full bg-[#002147] hover:bg-[#00162f] text-white font-semibold py-3 px-4 rounded-xl shadow-md transition-all cursor-pointer">
         Consultar Tablero
     </button>
 </form>
-    </div>
 
 </body>
 </html>

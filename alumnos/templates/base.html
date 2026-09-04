@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -8,38 +9,39 @@
 </head>
 <body class="bg-slate-100 min-h-screen text-slate-800">
 
-    <nav class="bg-indigo-700 text-white shadow-md">
+    <nav class="bg-[#002147] text-white shadow-md">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-            <a href="{% url 'dashboard_maestro' %}" class="font-bold text-lg tracking-wide">
-                Control Escolar
+            <a href="{% url 'dashboard_maestro' %}" class="flex items-center gap-3" aria-label="Colegio del Centro, Mi panel">
+                <img src="{% static 'alumnos/img/colegio-del-centro-logo.png' %}" alt="Colegio del Centro" class="h-10 w-auto">
+                <span class="hidden sm:block border-l border-white/25 pl-3 text-sm font-semibold">Plataforma escolar</span>
             </a>
 
             <div class="flex items-center gap-4 text-sm font-medium">
                 {% if user.is_authenticated %}
                     {% if user.is_superuser or user.is_staff %}
-                        <a href="{% url 'admin_dashboard' %}" class="hover:text-indigo-200 transition">
+                        <a href="{% url 'admin_dashboard' %}" class="hover:text-amber-200 transition">
                             Panel administrativo
                         </a>
-                        <a href="{% url 'gestionar_ciclos' %}" class="hover:text-indigo-200 transition">Ciclos</a>
-                        <a href="{% url 'tablero_reportes_atp' %}" class="hover:text-indigo-200 transition">Reportes ATP</a>
-                        <a href="{% url 'registrar_maestro' %}" class="hover:text-indigo-200 transition">
+                        <a href="{% url 'gestionar_ciclos' %}" class="hover:text-amber-200 transition">Ciclos</a>
+                        <a href="{% url 'tablero_reportes_atp' %}" class="hover:text-amber-200 transition">Reportes ATP</a>
+                        <a href="{% url 'registrar_maestro' %}" class="hover:text-amber-200 transition">
                             + Maestros
                         </a>
-                        <a href="{% url 'registrar_materia' %}" class="hover:text-indigo-200 transition">
+                        <a href="{% url 'registrar_materia' %}" class="hover:text-amber-200 transition">
                             + Materias
                         </a>
                     {% endif %}
 
-                    <a href="{% url 'dashboard_maestro' %}" class="hover:text-indigo-200 transition">
-                        Dashboard
+                    <a href="{% url 'dashboard_maestro' %}" class="hover:text-amber-200 transition">
+                        Mi panel
                     </a>
 
-                    <span class="bg-indigo-800 px-3 py-1 rounded-full text-xs">
+                    <span class="bg-white/15 px-3 py-1 rounded-full text-xs">
                         {{ user.username }}
                     </span>
                     <form method="post" action="{% url 'logout' %}">
                         {% csrf_token %}
-                        <button type="submit" class="hover:text-indigo-200 transition">Salir</button>
+                        <button type="submit" class="hover:text-amber-200 transition">Salir</button>
                     </form>
                 {% endif %}
             </div>

@@ -3,13 +3,13 @@
 {% block content %}
 <div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
     <!-- Encabezado con Migas de Pan -->
-    <div class="mb-6 bg-slate-950 rounded-3xl p-6 md:p-8 text-white shadow-lg">
+    <div class="mb-6 bg-[#002147] rounded-3xl p-6 md:p-8 text-white shadow-lg">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-            <a href="{% url 'dashboard_maestro' %}" class="text-xs font-semibold text-emerald-300 hover:underline flex items-center gap-1 mb-2">
-                ← Volver al Dashboard
+            <a href="{% url 'dashboard_maestro' %}" class="text-xs font-semibold text-amber-300 hover:underline flex items-center gap-1 mb-2">
+                ← Volver a Mi panel
             </a>
-            <p class="text-xs font-bold tracking-wide text-emerald-300">CENTRO DE MANDO</p>
+            <p class="text-xs font-bold tracking-wide text-amber-300">CENTRO DE MANDO</p>
             <h1 class="text-3xl font-black">{{ materia.nombre }}</h1>
             <p class="text-slate-300 text-sm mt-1">Grupo {{ grupo.grado }}°{{ grupo.seccion }} • {{ alumnos.count }} alumnos registrados</p>
         </div>

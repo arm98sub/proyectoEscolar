@@ -1,1 +1,56 @@
-{% extends 'base.html' %}{% block content %}<div class="max-w-6xl mx-auto py-8 px-4"><div class="flex justify-between"><div><h1 class="text-3xl font-bold">Control de reportes docentes</h1><p class="text-slate-500">{% if periodo %}{{ periodo.nombre }} · límite {{ periodo.fecha_limite }}{% else %}No hay periodo activo{% endif %}</p></div><a href="{% url 'gestionar_periodos_reportes' %}" class="px-4 py-2 bg-indigo-600 text-white rounded-xl">Gestionar periodos</a></div><div class="bg-white border rounded-2xl mt-6 overflow-hidden"><table class="w-full"><thead class="bg-slate-50"><tr><th class="p-4 text-left">Maestro</th><th class="p-4 text-left">Reporte de actividades</th><th class="p-4 text-left">Reporte de asistencias</th></tr></thead><tbody>{% for f in filas %}<tr class="border-t"><td class="p-4 font-bold">{{ f.maestro }}</td><td class="p-4">{% if f.estado_actividades == 'completado' %}<span class="text-emerald-700 font-bold">Completado</span>{% elif f.estado_actividades == 'tarde' %}<span class="text-amber-700 font-bold">Entregado tarde</span>{% else %}<span class="text-rose-700 font-bold">Incompleto</span><ul class="text-sm">{% for m in f.pendientes_actividades %}<li>{{ m.nombre }} · {{ m.grupo }}</li>{% endfor %}</ul>{% endif %}</td><td class="p-4">{% if f.estado_asistencias == 'completado' %}<span class="text-emerald-700 font-bold">Completado</span>{% elif f.estado_asistencias == 'tarde' %}<span class="text-amber-700 font-bold">Entregado tarde</span>{% else %}<span class="text-rose-700 font-bold">Incompleto</span><ul class="text-sm">{% for m in f.pendientes_asistencias %}<li>{{ m.nombre }} · {{ m.grupo }}</li>{% endfor %}</ul>{% endif %}</td></tr>{% empty %}<tr><td colspan="3" class="p-4">Activa un periodo para ver el control.</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+  <section class="bg-[#002147] rounded-3xl p-6 md:p-8 text-white shadow-lg">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+      <div>
+        <p class="text-xs font-bold tracking-[0.18em] text-amber-300">CONTROL ATP</p>
+        <h1 class="text-3xl font-black mt-1">Seguimiento de reportes docentes</h1>
+        {% if periodo %}
+          <p class="text-slate-200 mt-2">{{ periodo.nombre }} · fecha límite: <strong>{{ periodo.fecha_limite }}</strong></p>
+        {% else %}
+          <p class="text-amber-200 mt-2">No hay un periodo de reporte activo.</p>
+        {% endif %}
+      </div>
+      <a href="{% url 'gestionar_periodos_reportes' %}" class="inline-flex justify-center px-5 py-3 rounded-xl bg-amber-300 hover:bg-amber-200 text-[#002147] font-black text-sm">Gestionar periodos</a>
+    </div>
+  </section>
+
+  {% if periodo %}
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4 my-6">
+      <article class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm"><p class="text-sm text-slate-500">Maestros con asignaciones</p><p class="text-4xl font-black text-[#002147] mt-2">{{ resumen.maestros }}</p></article>
+      <article class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm"><p class="text-sm text-slate-500">Actividades entregadas</p><p class="text-4xl font-black text-emerald-600 mt-2">{{ resumen.actividades_entregadas }}<span class="text-lg text-slate-400">/{{ resumen.maestros }}</span></p></article>
+      <article class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm"><p class="text-sm text-slate-500">Asistencias entregadas</p><p class="text-4xl font-black text-emerald-600 mt-2">{{ resumen.asistencias_entregadas }}<span class="text-lg text-slate-400">/{{ resumen.maestros }}</span></p></article>
+    </section>
+
+    <section class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="p-6 border-b border-slate-200 bg-slate-50"><h2 class="font-black text-slate-800">Estado por maestro</h2><p class="text-sm text-slate-500 mt-1">Revisa los pendientes por grupo y materia antes de cerrar el periodo.</p></div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-slate-100 text-slate-500 text-xs uppercase"><tr><th class="p-4">Maestro</th><th class="p-4 min-w-72">Reporte de actividades</th><th class="p-4 min-w-72">Reporte de asistencias</th></tr></thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for f in filas %}
+              <tr class="align-top hover:bg-slate-50">
+                <td class="p-4 font-bold text-slate-800">{{ f.maestro }}</td>
+                <td class="p-4">
+                  {% if f.estado_actividades == 'completado' %}<span class="inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">Completado</span>
+                  {% elif f.estado_actividades == 'tarde' %}<span class="inline-block px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">Entregado tarde</span>
+                  {% else %}<span class="inline-block px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold">Incompleto</span><ul class="mt-2 space-y-1 text-xs text-slate-600">{% for m in f.pendientes_actividades %}<li>• {{ m.nombre }} · {{ m.grupo }}</li>{% endfor %}</ul>{% endif %}
+                </td>
+                <td class="p-4">
+                  {% if f.estado_asistencias == 'completado' %}<span class="inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">Completado</span>
+                  {% elif f.estado_asistencias == 'tarde' %}<span class="inline-block px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">Entregado tarde</span>
+                  {% else %}<span class="inline-block px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold">Incompleto</span><ul class="mt-2 space-y-1 text-xs text-slate-600">{% for m in f.pendientes_asistencias %}<li>• {{ m.nombre }} · {{ m.grupo }}</li>{% endfor %}</ul>{% endif %}
+                </td>
+              </tr>
+            {% empty %}<tr><td colspan="3" class="p-8 text-center text-slate-500">No hay maestros activos con asignaciones en este ciclo.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% else %}
+    <section class="mt-6 bg-white rounded-3xl border border-dashed border-slate-300 p-10 text-center"><p class="text-lg font-bold text-[#002147]">Aún no hay un periodo activo</p><p class="text-sm text-slate-500 mt-2">Activa un periodo para ver el cumplimiento de actividades y asistencias.</p><a href="{% url 'gestionar_periodos_reportes' %}" class="inline-block mt-5 px-5 py-3 rounded-xl bg-[#002147] text-white font-bold text-sm">Crear o activar periodo</a></section>
+  {% endif %}
+</div>
+{% endblock %}

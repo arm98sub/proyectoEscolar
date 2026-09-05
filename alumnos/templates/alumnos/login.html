@@ -30,13 +30,28 @@
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-600 mb-1">Contraseña</label>
-                <input type="password" name="password" required placeholder="••••••••" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                <div class="relative">
+                    <input id="password" type="password" name="password" required placeholder="••••••••" class="w-full px-3 py-2 pr-20 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                    <button type="button" id="toggle-password" class="absolute inset-y-0 right-0 px-3 text-xs font-bold text-[#002147] hover:text-[#00162f]" aria-label="Mostrar contraseña" aria-pressed="false">Mostrar</button>
+                </div>
             </div>
             <button type="submit" class="w-full bg-[#002147] hover:bg-[#00162f] text-white font-medium py-2 rounded-lg text-sm transition-colors cursor-pointer mt-2">
                 🚀 Entrar al Sistema
             </button>
         </form>
     </div>
+
+    <script>
+        const passwordInput = document.getElementById('password');
+        const passwordToggle = document.getElementById('toggle-password');
+        passwordToggle.addEventListener('click', () => {
+            const visible = passwordInput.type === 'text';
+            passwordInput.type = visible ? 'password' : 'text';
+            passwordToggle.textContent = visible ? 'Mostrar' : 'Ocultar';
+            passwordToggle.setAttribute('aria-label', visible ? 'Mostrar contraseña' : 'Ocultar contraseña');
+            passwordToggle.setAttribute('aria-pressed', String(!visible));
+        });
+    </script>
 
 </body>
 </html>

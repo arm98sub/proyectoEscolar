@@ -360,7 +360,14 @@ def tablero_reportes_atp(request):
                     return 'incompleto'
                 return 'tarde' if any(r.fecha_creacion.date() > periodo.fecha_limite for r in registros) else 'completado'
             filas.append({'maestro': maestro, 'pendientes_actividades': pendientes_actividades, 'pendientes_asistencias': pendientes_asistencias, 'estado_actividades': estado(actividades, pendientes_actividades), 'estado_asistencias': estado(asistencias, pendientes_asistencias)})
-    return render(request, 'alumnos/tablero_reportes_atp.html', {'periodo': periodo, 'filas': filas})
+    resumen = {
+        'maestros': len(filas),
+        'actividades_entregadas': sum(f['estado_actividades'] != 'incompleto' for f in filas),
+        'asistencias_entregadas': sum(f['estado_asistencias'] != 'incompleto' for f in filas),
+    }
+    return render(request, 'alumnos/tablero_reportes_atp.html', {
+        'periodo': periodo, 'filas': filas, 'resumen': resumen,
+    })
 
 
 @admin_required

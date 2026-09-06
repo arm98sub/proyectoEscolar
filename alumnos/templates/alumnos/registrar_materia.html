@@ -7,7 +7,7 @@
             <h1 class="text-2xl font-bold text-slate-800">Gestión de Materias y Asignación Docente</h1>
             <p class="text-slate-600 text-sm">Ciclo activo: <strong>{{ ciclo.nombre|default:'ninguno' }}</strong></p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
             <a href="{% url 'registrar_catalogo_materia' %}" class="px-4 py-2 bg-indigo-600 text-white font-medium text-xs rounded-xl">+ Materia al catálogo</a>
             <a href="{% url 'registrar_maestro' %}" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-medium text-xs rounded-xl">← Gestión de Maestros</a>
         </div>
@@ -91,7 +91,7 @@
         <div class="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <h2 class="text-lg font-bold text-slate-800 mb-4 pb-2 border-b">Catálogo de Asignaturas Asignadas</h2>
             <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
+                <table class="w-full min-w-[42rem] text-left text-sm">
                     <thead>
                         <tr class="bg-slate-50 text-slate-500 text-xs uppercase border-b">
                             <th class="p-3">Materia</th>

@@ -10,14 +10,16 @@
 <body class="bg-slate-100 min-h-screen text-slate-800">
 
     <nav class="bg-[#002147] text-white shadow-md">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center relative">
             <a href="{% url 'dashboard_maestro' %}" class="flex items-center gap-3" aria-label="Colegio del Centro, Mi panel">
                 <img src="{% static 'alumnos/img/escudo-colegio-del-centro.png' %}" alt="Escudo del Colegio del Centro" class="h-12 w-10 object-contain">
                 <span class="hidden sm:block border-l border-white/25 pl-3 text-sm font-semibold">Plataforma escolar</span>
             </a>
 
-            <div class="flex items-center gap-4 text-sm font-medium">
-                {% if user.is_authenticated %}
+            {% if user.is_authenticated %}
+            <button type="button" id="menu-toggle" class="md:hidden rounded-lg border border-white/30 px-3 py-2 text-sm font-bold hover:bg-white/10" aria-controls="site-menu" aria-expanded="false">Menú</button>
+            <div id="site-menu" class="hidden absolute top-full left-4 right-4 z-20 mt-2 rounded-xl bg-[#002147] p-4 shadow-xl md:static md:mt-0 md:flex md:items-center md:gap-4 md:bg-transparent md:p-0 md:shadow-none">
+                <div class="flex flex-col gap-3 text-sm font-medium md:flex-row md:items-center md:gap-4">
                     {% if user.is_superuser or user.is_staff %}
                         <a href="{% url 'admin_dashboard' %}" class="hover:text-amber-200 transition">
                             Panel administrativo
@@ -46,8 +48,9 @@
                         {% csrf_token %}
                         <button type="submit" class="hover:text-amber-200 transition">Salir</button>
                     </form>
-                {% endif %}
+                </div>
             </div>
+            {% endif %}
         </div>
     </nav>
 
@@ -55,6 +58,18 @@
         {% block content %}
         {% endblock %}
     </main>
+
+    <script>
+        const menuToggle = document.getElementById('menu-toggle');
+        const siteMenu = document.getElementById('site-menu');
+        if (menuToggle && siteMenu) {
+            menuToggle.addEventListener('click', () => {
+                const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
+                menuToggle.setAttribute('aria-expanded', String(!expanded));
+                siteMenu.classList.toggle('hidden');
+            });
+        }
+    </script>
 
 </body>
 </html>

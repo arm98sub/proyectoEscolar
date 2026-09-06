@@ -3,10 +3,10 @@
 <div class="max-w-5xl mx-auto py-8 px-4">
   <a href="{% url 'admin_dashboard' %}?ciclo={{ ciclo.id }}" class="text-sm font-semibold text-indigo-700">← Panel administrativo</a>
   <h1 class="text-3xl font-bold mt-2 mb-1">{{ nombre_materia }}</h1><p class="text-slate-500 mb-6">Ciclo {{ ciclo.nombre }}</p>
-  <div class="bg-white border rounded-2xl overflow-hidden shadow-sm">
-    <table class="w-full text-left"><thead class="bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="p-4">Grupo</th><th class="p-4">Docente</th><th class="p-4">Alumnos</th><th class="p-4 text-right">Centro de Mando</th></tr></thead>
+  <div class="bg-white border rounded-2xl overflow-hidden shadow-sm"><div class="overflow-x-auto">
+    <table class="w-full min-w-[36rem] text-left"><thead class="bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="p-4">Grupo</th><th class="p-4">Docente</th><th class="p-4">Alumnos</th><th class="p-4 text-right">Centro de Mando</th></tr></thead>
       <tbody class="divide-y">{% for materia in materias %}<tr><td class="p-4 font-bold">{{ materia.grupo }}</td><td class="p-4">{{ materia.maestro }}</td><td class="p-4">{{ materia.grupo.alumnos.count }}</td><td class="p-4 text-right"><a href="{% url 'centro_mando_materia' materia.id %}" class="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl">Abrir</a></td></tr>{% endfor %}</tbody>
-    </table>
+    </table></div>
   </div>
 </div>
 {% endblock %}

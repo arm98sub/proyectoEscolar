@@ -317,6 +317,9 @@ class AdminDashboardCrudTests(TestCase):
         response = self.client.get(reverse('tablero_reportes_atp'))
         fila = next(f for f in response.context['filas'] if f['maestro'] == self.maestro_1)
         self.assertEqual(fila['estado_actividades'], 'tarde')
+        self.assertEqual(response.context['resumen']['maestros'], 2)
+        self.assertEqual(response.context['resumen']['actividades_entregadas'], 1)
+        self.assertEqual(response.context['resumen']['asistencias_entregadas'], 0)
 
 
 class PortalTutoresTests(TestCase):

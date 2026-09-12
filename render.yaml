@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: proyecto-escolar-demo
+    runtime: docker
+    plan: free
+    healthCheckPath: /health/
+    autoDeployTrigger: commit
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        value: "https://*.onrender.com"
+      - key: DJANGO_SECURE_SSL_REDIRECT
+        value: "True"
+      - key: DJANGO_SECURE_HSTS_SECONDS
+        value: "31536000"
+      - key: DJANGO_LOAD_DEMO_DATA
+        value: "True"
+      - key: DEMO_ADMIN_PASSWORD
+        sync: false
+      - key: DEMO_TEACHER_PASSWORD
+        sync: false
+      - key: DEMO_TUTOR_PASSWORD
+        sync: false

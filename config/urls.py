@@ -4,7 +4,9 @@ from django.urls import path
 from .api import api  # Importamos el objeto 'api' que creaste en api.py
 from alumnos.views import dashboard_maestro, login_view, logout_view,detalle_alumno, marcar_tarea_entregada,agregar_tarea_pendiente
 from alumnos import views  # <-- Importamos el archivo views de la app alumnos
+from config.views import health_check
 urlpatterns = [
+    path('health/', health_check, name='health_check'),
     path('', login_view, name='home'),
     path('login/', login_view, name='login'),
     path('admin/', admin.site.urls),

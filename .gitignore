@@ -13,6 +13,7 @@ wheels/
 
 # Base de Datos local (opcional, recomendable si no quieres subir datos reales)
 *.sqlite3
+staticfiles/
 
 # Entorno y configuraciones locales
 .env

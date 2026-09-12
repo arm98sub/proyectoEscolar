@@ -1,12 +1,15 @@
 from django.contrib.auth.models import User
+from django.core.management import call_command
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 from datetime import date, datetime
+from io import StringIO
+from unittest.mock import patch
 
 from .models import (
     Alumno, Grupo, Maestro, Materia, Tutor, CatalogoMateria, CicloEscolar, PeriodoReporte, TareaPendiente, RegistroTareasPeriodo,
-    RegistroInasistenciasPeriodo,
+    RegistroInasistenciasPeriodo, DetalleTareaAlumno,
 )
 
 
@@ -428,6 +431,23 @@ class CentroMandoValidacionTests(TestCase):
         self.assertEqual(registro.detalles_alumnos.get().tareas_no_entregadas, 2)
         self.assertEqual(registro.periodo_reporte, self.periodo)
 
+    def test_cada_valor_se_guarda_por_id_aunque_cambie_el_orden_visual(self):
+        alumno_que_aparece_primero = Alumno.objects.create(
+            nombre='Aarón', apellido='Antes', grupo=self.grupo_1
+        )
+        self.client.post(self.url, {
+            'tipo_formulario': 'guardar_tareas',
+            'total_tareas_encargadas': '10',
+            f'tareas_alumno_{self.alumno_1.pk}': '7',
+            f'tareas_alumno_{alumno_que_aparece_primero.pk}': '2',
+        })
+        registro = RegistroTareasPeriodo.objects.get()
+        valores = dict(
+            registro.detalles_alumnos.values_list('alumno_id', 'tareas_no_entregadas')
+        )
+        self.assertEqual(valores[self.alumno_1.pk], 7)
+        self.assertEqual(valores[alumno_que_aparece_primero.pk], 2)
+
     def test_rechaza_captura_si_no_hay_periodo_activo(self):
         self.periodo.activo = False
         self.periodo.save(update_fields=['activo'])
@@ -437,3 +457,32 @@ class CentroMandoValidacionTests(TestCase):
             'total_tareas_encargadas': '2', f'tareas_alumno_{self.alumno_1.pk}': '0',
         })
         self.assertFalse(RegistroTareasPeriodo.objects.exists())
+
+
+class DemoDeploymentTests(TestCase):
+    def test_health_check_confirma_aplicacion_y_base_de_datos(self):
+        response = self.client.get(reverse('health_check'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'status': 'ok'})
+
+    @patch.dict('os.environ', {
+        'DEMO_ADMIN_PASSWORD': 'ClaveATP-Segura-2026!',
+        'DEMO_TEACHER_PASSWORD': 'ClaveDocente-Segura-2026!',
+        'DEMO_TUTOR_PASSWORD': 'ClaveFamilia-Segura-2026!',
+    })
+    def test_datos_demo_son_ficticios_e_idempotentes(self):
+        output = StringIO()
+        call_command('seed_demo', force=True, stdout=output)
+        call_command('seed_demo', force=True, stdout=output)
+
+        self.assertTrue(User.objects.get(username='atp.demo').is_superuser)
+        self.assertTrue(User.objects.get(username='docente.demo').maestro.activo)
+        self.assertEqual(User.objects.filter(username__endswith='.demo').count(), 4)
+        self.assertEqual(CicloEscolar.objects.filter(nombre='2026-2027 DEMO').count(), 1)
+        self.assertEqual(Grupo.objects.filter(seccion__endswith='DEMO').count(), 2)
+        self.assertEqual(
+            DetalleTareaAlumno.objects.filter(
+                registro_periodo__periodo_reporte__nombre='Reporte de demostración'
+            ).count(),
+            6,
+        )

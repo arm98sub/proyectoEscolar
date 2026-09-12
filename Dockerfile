@@ -29,5 +29,5 @@ RUN uv sync --frozen
 # Copiamos el resto del código
 COPY . .
 
-# Comando para correr el servidor
-CMD ["uv", "run", "python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Servidor de producción. Docker Compose reemplaza este comando en desarrollo.
+CMD ["sh", "-c", "uv run python manage.py migrate && uv run python manage.py collectstatic --noinput && uv run python manage.py seed_demo && uv run gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]

@@ -13,7 +13,7 @@
             <h1 class="text-3xl font-black">{{ materia.nombre }}</h1>
             <p class="text-slate-300 text-sm mt-1">Grupo {{ grupo.grado }}°{{ grupo.seccion }} • {{ alumnos.count }} alumnos registrados</p>
         </div>
-        <div class="rounded-2xl bg-white/10 border border-white/15 px-4 py-3 text-sm">{% if periodo_reporte %}<p class="text-emerald-300 font-bold">Periodo activo</p><p>{{ periodo_reporte.nombre }}</p><p class="text-xs text-slate-300">Límite: {{ periodo_reporte.fecha_limite }}</p>{% else %}<p class="text-amber-300 font-bold">Sin periodo activo</p>{% endif %}</div>
+        <div class="rounded-2xl bg-white/10 border border-white/15 px-4 py-3 text-sm">{% if periodo_reporte %}<p class="text-emerald-300 font-bold">Periodo activo</p><p>{{ periodo_reporte.nombre }}</p><p class="text-xs text-slate-200">Del {{ periodo_reporte.fecha_inicio|date:"j \d\e F" }} al {{ periodo_reporte.fecha_fin|date:"j \d\e F \d\e Y" }}</p><p class="text-xs text-slate-300">Límite: {{ periodo_reporte.fecha_limite }}</p>{% else %}<p class="text-amber-300 font-bold">Sin periodo activo</p>{% endif %}</div>
         </div>
     </div>
 

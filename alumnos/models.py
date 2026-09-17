@@ -156,6 +156,7 @@ class Tutor(models.Model):
     apellido = models.CharField(max_length=100)
     correo = models.EmailField(unique=True)
     telefono = models.CharField(max_length=20)
+    debe_cambiar_password = models.BooleanField(default=False)
     # Relación Muchos a Muchos: Un papá puede tener varios hijos y un alumno varios tutores
     hijos = models.ManyToManyField(Alumno, related_name='tutores')
 

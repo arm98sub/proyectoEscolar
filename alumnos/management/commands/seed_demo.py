@@ -118,11 +118,14 @@ class Command(BaseCommand):
         for nombre, apellido in [('Renata', 'Ejemplo'), ('Emiliano', 'Ejemplo')]:
             Alumno.objects.update_or_create(nombre=nombre, apellido=apellido, grupo=grupo_1b)
 
-        ciclo, _ = CicloEscolar.objects.update_or_create(
+        ciclo, _ = CicloEscolar.objects.get_or_create(
             nombre='2026-2027 DEMO',
             defaults={'activo': True, 'cerrado': False},
         )
-        CicloEscolar.objects.exclude(pk=ciclo.pk).filter(nombre__contains='DEMO').update(activo=False)
+        # Un solo ciclo puede estar activo. Si la ATP activó otro ciclo, no
+        # revertimos su elección en el siguiente despliegue.
+        if ciclo.activo:
+            CicloEscolar.objects.exclude(pk=ciclo.pk).filter(activo=True).update(activo=False)
         periodo, _ = PeriodoReporte.objects.update_or_create(
             ciclo=ciclo,
             nombre='Reporte de demostración',

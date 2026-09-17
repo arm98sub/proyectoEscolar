@@ -2,6 +2,7 @@ from django import forms
 from .models import Alumno, TareaEncargada, Materia, Grupo, Maestro, Tutor, CatalogoMateria, CicloEscolar, PeriodoReporte
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.forms import SetPasswordForm
 
 
 INPUT_CLASS = 'w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
@@ -56,11 +57,11 @@ class TareaEncargadaForm(forms.Form):
 class CrearMaestroForm(forms.Form):
     username = forms.CharField(
         label="Nombre de Usuario",
-        widget=forms.TextInput(attrs={'class': 'w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'})
+        widget=forms.TextInput(attrs={'class': INPUT_CLASS, 'autocomplete': 'off'})
     )
     password = forms.CharField(
         label="Contraseña",
-        widget=forms.PasswordInput(attrs={'class': 'w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'})
+        widget=forms.PasswordInput(attrs={'class': INPUT_CLASS, 'autocomplete': 'new-password'})
     )
     nombre = forms.CharField(
         label="Nombre(s)",
@@ -89,9 +90,6 @@ class CrearMaestroForm(forms.Form):
 
 
 class CrearTutorForm(forms.ModelForm):
-    username = forms.CharField(label="Nombre de usuario", widget=forms.TextInput(attrs={'class': INPUT_CLASS}))
-    password = forms.CharField(label="Contraseña", widget=forms.PasswordInput(attrs={'class': INPUT_CLASS}))
-
     class Meta:
         model = Tutor
         fields = ['nombre', 'apellido', 'correo', 'telefono', 'hijos']
@@ -108,23 +106,12 @@ class CrearTutorForm(forms.ModelForm):
         self.fields['hijos'].queryset = Alumno.objects.select_related('grupo').order_by('apellido', 'nombre')
         self.fields['hijos'].help_text = 'Selecciona uno o varios alumnos para esta cuenta.'
 
-    def clean_username(self):
-        username = self.cleaned_data['username'].strip()
-        if User.objects.filter(username=username).exists():
-            raise forms.ValidationError('Este nombre de usuario ya está registrado.')
-        return username
-
-    def clean_password(self):
-        password = self.cleaned_data['password']
-        validate_password(password)
-        return password
-
-
 class EditarTutorForm(CrearTutorForm):
+    username = forms.CharField(label='Nombre de usuario', widget=forms.TextInput(attrs={'class': INPUT_CLASS, 'autocomplete': 'off'}))
     password = forms.CharField(
         label='Nueva contraseña', required=False,
         help_text='Déjala vacía para conservar la contraseña actual.',
-        widget=forms.PasswordInput(attrs={'class': INPUT_CLASS}),
+        widget=forms.PasswordInput(attrs={'class': INPUT_CLASS, 'autocomplete': 'new-password'}),
     )
 
     def __init__(self, *args, **kwargs):
@@ -142,6 +129,14 @@ class EditarTutorForm(CrearTutorForm):
         password = self.cleaned_data.get('password')
         if password:
             validate_password(password, self.instance.user)
+        return password
+
+
+class CambiarPasswordTutorForm(SetPasswordForm):
+    def clean_new_password2(self):
+        password = self.cleaned_data.get('new_password2')
+        if password and self.user.check_password(password):
+            raise forms.ValidationError('Elige una contraseña distinta de la temporal.')
         return password
     
 class CrearMateriaForm(forms.ModelForm):

@@ -19,7 +19,7 @@
         <!-- Formulario de Alta -->
         <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-fit">
             <h2 class="text-lg font-bold text-slate-800 mb-4 pb-2 border-b">Nuevo Registro</h2>
-            <form method="POST" class="space-y-4">
+            <form method="POST" class="space-y-4" autocomplete="off">
                 {% csrf_token %}
                 
                 {% for field in form %}

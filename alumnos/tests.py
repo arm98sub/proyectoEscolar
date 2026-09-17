@@ -358,18 +358,45 @@ class PortalTutoresTests(TestCase):
     def test_administrador_crea_tutor_con_cuenta_y_varios_alumnos(self):
         self.client.force_login(self.admin)
         response = self.client.post(reverse('registrar_tutor'), {
-            'username': 'familia-nueva',
-            'password': 'ClaveSegura!2026',
             'nombre': 'Claudia',
             'apellido': 'Ramírez',
             'correo': 'claudia@example.com',
             'telefono': '4921111111',
             'hijos': [self.alumno_1.pk, self.alumno_2.pk],
         })
-        self.assertRedirects(response, reverse('registrar_tutor'))
+        self.assertRedirects(response, reverse('registrar_tutor'), fetch_redirect_response=False)
         tutor = Tutor.objects.get(correo='claudia@example.com')
-        self.assertTrue(tutor.user.check_password('ClaveSegura!2026'))
+        self.assertEqual(tutor.user.username, 'claudia.ramirez')
+        self.assertTrue(tutor.debe_cambiar_password)
+        acceso = self.client.get(reverse('registrar_tutor'))
+        temporal = acceso.context['nuevo_tutor_acceso']['temporal']
+        self.assertTrue(tutor.user.check_password(temporal))
+        self.assertNotContains(self.client.get(reverse('registrar_tutor')), temporal)
         self.assertEqual(set(tutor.hijos.values_list('pk', flat=True)), {self.alumno_1.pk, self.alumno_2.pk})
+
+        self.client.post(reverse('logout'), follow=True)
+        self.assertRedirects(self.client.post(reverse('login_tutor'), {
+            'username': tutor.user.username, 'password': temporal,
+        }), reverse('cambiar_password_tutor'))
+        self.assertRedirects(self.client.get(reverse('tablero_tutor')), reverse('cambiar_password_tutor'))
+        self.assertRedirects(self.client.post(reverse('cambiar_password_tutor'), {
+            'new_password1': 'NuevaClaveSegura!2026',
+            'new_password2': 'NuevaClaveSegura!2026',
+        }), reverse('tablero_tutor'))
+        tutor.refresh_from_db()
+        self.assertFalse(tutor.debe_cambiar_password)
+        self.assertTrue(tutor.user.check_password('NuevaClaveSegura!2026'))
+
+    def test_nombre_repetido_recibe_usuario_unico(self):
+        self.client.force_login(self.admin)
+        for indice in (1, 2):
+            self.client.post(reverse('registrar_tutor'), {
+                'nombre': 'Claudia', 'apellido': 'Ramírez',
+                'correo': f'claudia{indice}@example.com', 'telefono': '4921111111',
+                'hijos': [self.alumno_1.pk],
+            })
+        self.assertTrue(User.objects.filter(username='claudia.ramirez').exists())
+        self.assertTrue(User.objects.filter(username='claudia.ramirez2').exists())
 
     def test_gestion_tutores_exige_administrador(self):
         self.client.force_login(self.user_1)
@@ -479,6 +506,7 @@ class DemoDeploymentTests(TestCase):
         self.assertTrue(User.objects.get(username='docente.demo').maestro.activo)
         self.assertEqual(User.objects.filter(username__endswith='.demo').count(), 4)
         self.assertEqual(CicloEscolar.objects.filter(nombre='2026-2027 DEMO').count(), 1)
+        self.assertEqual(CicloEscolar.objects.filter(activo=True).count(), 1)
         self.assertEqual(Grupo.objects.filter(seccion__endswith='DEMO').count(), 2)
         self.assertEqual(
             DetalleTareaAlumno.objects.filter(
@@ -486,3 +514,22 @@ class DemoDeploymentTests(TestCase):
             ).count(),
             6,
         )
+
+    @patch.dict('os.environ', {
+        'DEMO_ADMIN_PASSWORD': 'ClaveATP-Segura-2026!',
+        'DEMO_TEACHER_PASSWORD': 'ClaveDocente-Segura-2026!',
+        'DEMO_TUTOR_PASSWORD': 'ClaveFamilia-Segura-2026!',
+    })
+    def test_semilla_no_reactiva_demo_si_atp_eligio_otro_ciclo(self):
+        call_command('seed_demo', force=True, stdout=StringIO())
+        demo = CicloEscolar.objects.get(nombre='2026-2027 DEMO')
+        demo.activo = False
+        demo.save(update_fields=['activo'])
+        real = CicloEscolar.objects.get(nombre='2026-2027')
+        real.activo = True
+        real.save(update_fields=['activo'])
+        call_command('seed_demo', force=True, stdout=StringIO())
+        demo.refresh_from_db()
+        real.refresh_from_db()
+        self.assertFalse(demo.activo)
+        self.assertTrue(real.activo)

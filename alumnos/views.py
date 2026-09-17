@@ -6,11 +6,12 @@ from django.db import transaction
 from django.http import HttpResponseNotAllowed
 from django.http import Http404
 from django.utils.text import slugify
+from django.utils.crypto import get_random_string
 from django.views.decorators.http import require_POST
 from .models import Maestro, Materia, Grupo, Alumno, Tutor, CatalogoMateria, CicloEscolar, PeriodoReporte, RegistroTareasPeriodo, DetalleTareaAlumno, RegistroInasistenciasPeriodo, DetalleInasistenciaAlumno
 from .forms import (
     TareaEncargadaForm, CrearMaestroForm, CrearMateriaForm, EditarMaestroForm,
-    EditarMateriaForm, CatalogoMateriaForm, CicloEscolarForm, PeriodoReporteForm, RegistroTareasCentroForm, RegistroInasistenciasCentroForm, CrearTutorForm, EditarTutorForm,
+    EditarMateriaForm, CatalogoMateriaForm, CicloEscolarForm, PeriodoReporteForm, RegistroTareasCentroForm, RegistroInasistenciasCentroForm, CrearTutorForm, EditarTutorForm, CambiarPasswordTutorForm,
 )
 from django.contrib import messages  # <--- AGREGAR ESTA LÍNEA
 from .models import Grupo, Materia, Alumno, RegistroTareasPeriodo, DetalleTareaAlumno
@@ -158,21 +159,36 @@ def registrar_tutor(request):
     form = CrearTutorForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         with transaction.atomic():
+            nombre_usuario = slugify(form.cleaned_data['nombre']).replace('-', '')
+            apellido_usuario = slugify(form.cleaned_data['apellido']).replace('-', '')
+            base = '.'.join(parte for parte in (nombre_usuario, apellido_usuario) if parte)[:120] or 'familia'
+            username = base
+            numero = 2
+            while User.objects.filter(username=username).exists():
+                username = f'{base}{numero}'
+                numero += 1
+            temporal = get_random_string(18)
             user = User.objects.create_user(
-                username=form.cleaned_data['username'],
-                password=form.cleaned_data['password'],
+                username=username,
+                password=temporal,
                 first_name=form.cleaned_data['nombre'],
                 last_name=form.cleaned_data['apellido'],
                 email=form.cleaned_data['correo'],
             )
             tutor = form.save(commit=False)
             tutor.user = user
+            tutor.debe_cambiar_password = True
             tutor.save()
             form.save_m2m()
-        messages.success(request, f"Tutor '{tutor}' registrado con acceso al Portal de familias.")
+        request.session['nuevo_tutor_acceso'] = {'usuario': username, 'temporal': temporal}
         return redirect('registrar_tutor')
     tutores = Tutor.objects.select_related('user').prefetch_related('hijos__grupo').order_by('apellido', 'nombre')
-    return render(request, 'alumnos/registrar_tutor.html', {'form': form, 'tutores': tutores})
+    response = render(request, 'alumnos/registrar_tutor.html', {
+        'form': form, 'tutores': tutores,
+        'nuevo_tutor_acceso': request.session.pop('nuevo_tutor_acceso', None),
+    })
+    response['Cache-Control'] = 'no-store'
+    return response
 
 
 @admin_required
@@ -192,6 +208,7 @@ def editar_tutor(request, tutor_id):
             user.email = tutor.correo
             if form.cleaned_data.get('password'):
                 user.set_password(form.cleaned_data['password'])
+                tutor.debe_cambiar_password = True
             user.save()
             tutor.save()
             form.save_m2m()
@@ -852,7 +869,7 @@ def obtener_tablero_alumno(alumno):
 
 def login_tutor(request):
     if request.user.is_authenticated and hasattr(request.user, 'tutor'):
-        return redirect('tablero_tutor')
+        return redirect('cambiar_password_tutor' if request.user.tutor.debe_cambiar_password else 'tablero_tutor')
 
     if request.method == 'POST':
         username = request.POST.get('username', '').strip()
@@ -861,17 +878,35 @@ def login_tutor(request):
 
         if user is not None and hasattr(user, 'tutor'):
             login(request, user)
-            return redirect('tablero_tutor')
+            return redirect('cambiar_password_tutor' if user.tutor.debe_cambiar_password else 'tablero_tutor')
 
         messages.error(request, 'Usuario o contraseña de tutor incorrectos.')
 
     return render(request, 'alumnos/login_tutor.html')
 
 
+def cambiar_password_tutor(request):
+    if not request.user.is_authenticated or not hasattr(request.user, 'tutor'):
+        return redirect('login_tutor')
+    form = CambiarPasswordTutorForm(request.user, request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        request.user.tutor.debe_cambiar_password = False
+        request.user.tutor.save(update_fields=['debe_cambiar_password'])
+        # Cambiar la contraseña conserva la sesión actual del tutor.
+        from django.contrib.auth import update_session_auth_hash
+        update_session_auth_hash(request, request.user)
+        messages.success(request, 'Tu contraseña se actualizó correctamente.')
+        return redirect('tablero_tutor')
+    return render(request, 'alumnos/cambiar_password_tutor.html', {'form': form})
+
+
 
 def tablero_tutor(request):
     if not request.user.is_authenticated or not hasattr(request.user, 'tutor'):
         return redirect('login_tutor')
+    if request.user.tutor.debe_cambiar_password:
+        return redirect('cambiar_password_tutor')
 
     alumno_id = request.GET.get('alumno')
     hijos = request.user.tutor.hijos.select_related('grupo').all()
